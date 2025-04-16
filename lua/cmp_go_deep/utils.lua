@@ -1,0 +1,171 @@
+local gopls_requests = require("cmp_go_deep.gopls_requests")
+local treesitter_implementations = require("cmp_go_deep.treesitter_implementations")
+
+local utils = {}
+
+local completionItemKind = vim.lsp.protocol.CompletionItemKind
+
+utils.symbol_to_completion_kind = {
+	[10] = completionItemKind.Enum,
+	[11] = completionItemKind.Interface,
+	[12] = completionItemKind.Function,
+	[13] = completionItemKind.Variable,
+	[14] = completionItemKind.Constant,
+	[23] = completionItemKind.Struct,
+	[26] = completionItemKind.TypeParameter,
+}
+
+---@return string
+utils.get_cursor_prefix_word = function()
+	local pos = vim.api.nvim_win_get_cursor(0)
+	if #pos < 2 then
+		return ""
+	end
+
+	local col = pos[2]
+	local start_col = col
+	local end_col = col
+
+	local line = vim.api.nvim_get_current_line()
+
+	while start_col > 0 and not line:sub(start_col - 1, start_col - 1):match("%s") do
+		start_col = start_col - 1
+	end
+
+	return line:sub(start_col, end_col)
+end
+
+---@return vim.lsp.Client | nil
+utils.get_gopls_client = function()
+	local gopls_clients = vim.lsp.get_clients({ name = "gopls" })
+	if #gopls_clients > 0 then
+		return gopls_clients[1]
+	end
+	return nil
+end
+
+---@param uri string
+---@param range lsp.Range
+---@param implementation "hover" | "regex"
+---@param timeout integer
+---@return string | nil
+utils.get_documentation = function(uri, range, implementation, timeout)
+	if implementation == "hover" then
+		return gopls_requests.get_documentation(utils.get_gopls_client(), timeout, uri, range)
+	end
+
+	--fallback to regex
+	local filepath = vim.uri_to_fname(uri)
+	local bufnr = vim.fn.bufadd(filepath)
+	vim.fn.bufload(bufnr)
+
+	local doc_lines = {}
+	local start_line = range.start.line
+
+	for i = start_line - 1, 0, -1 do
+		local line = vim.api.nvim_buf_get_lines(bufnr, i, i + 1, false)[1]
+		if not line or line:match("^%s*$") then
+			break
+		end
+
+		local comment = line:match("^%s*//(.*)")
+		if comment then
+			table.insert(doc_lines, 1, vim.trim(comment))
+		else
+			break
+		end
+	end
+
+	if vim.tbl_isempty(doc_lines) then
+		return nil
+	end
+
+	local ft = vim.bo[bufnr].filetype
+	return string.format("```%s\n%s\n```", ft, table.concat(doc_lines, "\n"))
+end
+
+---@param bufnr (integer)
+---@return table<string, boolean>
+utils.get_imported_paths = function(bufnr)
+	return treesitter_implementations.get_imported_paths(bufnr)
+end
+
+---@param bufnr (integer)
+---@param import_path string
+---@param implementation "treesitter" | "gopls"
+utils.add_import_statement = function(bufnr, import_path, implementation)
+	if implementation == "gopls" then
+		gopls_requests.add_import_statement(utils.get_gopls_client(), bufnr, import_path)
+		return
+	end
+	treesitter_implementations.add_import_statement(bufnr, import_path)
+end
+
+---@param uri string
+---@param package_name_cache table<string, string>
+---@param implementation "treesitter" | "regex"
+---@return string|nil
+--- TODO: consider asking gopls for the package name, but this is probably faster
+utils.get_package_name = function(uri, package_name_cache, implementation)
+	local cached = package_name_cache[uri]
+	if cached then
+		if cached == "" then
+			return nil
+		end
+		return cached
+	end
+
+	if implementation == "treesitter" then
+		local pkg = treesitter_implementations.get_package_name(uri)
+		if pkg then
+			package_name_cache[uri] = pkg
+			return pkg
+		end
+		package_name_cache[uri] = ""
+		return ""
+	end
+
+	--Fallback to regex
+	--- FIXME: regex implementation doesn't work for package declarations like: "/* hehe */ package xd"
+	local fname = vim.uri_to_fname(uri)
+	if not fname then
+		vim.notify("could not get file name from uri: " .. uri, vim.log.levels.WARN)
+		package_name_cache[uri] = ""
+		return nil
+	end
+
+	local file, err = io.open(fname, "r")
+	if not file then
+		vim.notify("could not open file: " .. err, vim.log.levels.WARN)
+		package_name_cache[uri] = ""
+		return nil
+	end
+
+	local in_block = false
+	for line in file:lines() do
+		local ln = line:match("^%s*(.-)%s*$")
+		if not in_block and ln:find("^/%*") then
+			in_block = true
+			if ln:find("%*/") then
+				in_block = false
+			end
+		elseif in_block then
+			if ln:find("%*/") then
+				in_block = false
+			end
+		elseif ln == "" or ln:find("^//") then
+			-- ignore
+		else
+			local pkg = ln:match("^package%s+([%a_][%w_]*)")
+			file:close()
+			package_name_cache[uri] = pkg
+			return pkg
+		end
+	end
+
+	file:close()
+	package_name_cache[uri] = ""
+	return nil
+end
+
+return utils
