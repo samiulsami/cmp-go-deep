@@ -66,7 +66,7 @@ gopls_requests.add_import_statement = function(gopls_client, bufnr, import_path)
 	end)
 end
 
----not implemented yet
+---TODO: Implement/integrate this
 ---@param opts cmp_go_deep.Options
 ---@param gopls_client vim.lsp.Client | nil
 ---@param bufnr integer
@@ -85,7 +85,7 @@ gopls_requests.textdocument_completion = function(opts, gopls_client, bufnr, uti
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	local position = { line = cursor[1] - 1, character = cursor[2] }
 
-	gopls_client.request("textDocument/completion", {
+	local success, request_id = gopls_client.request("textDocument/completion", {
 		textDocument = { uri = vim.uri_from_bufnr(bufnr) },
 		position = position,
 		context = { triggerKind = 1 },
@@ -98,9 +98,20 @@ gopls_requests.textdocument_completion = function(opts, gopls_client, bufnr, uti
 		done = true
 	end, bufnr)
 
+	if not success or not request_id then
+		vim.notify("failed to get textDocument/completion", vim.log.levels.WARN)
+		return {}, false
+	end
+
 	vim.wait(opts.textdocument_completion_timeout_ms, function()
 		return done
 	end, 10)
+
+	if not done then
+		vim.notify("timed out waiting for textDocument/completion", vim.log.levels.WARN)
+		gopls_client.cancel_request(request_id)
+		return {}, false
+	end
 
 	local items = {}
 	for _, item in ipairs(result) do
@@ -130,14 +141,24 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 
 	local result = {}
 	local done = false
-	gopls_client.request("workspace/symbol", { query = utils.get_cursor_prefix_word() }, function(_, res)
-		if not res then
+	local success, request_id = gopls_client.request(
+		"workspace/symbol",
+		{ query = utils.get_cursor_prefix_word() },
+		function(_, res)
+			if not res then
+				done = true
+				return
+			end
+			result = res
 			done = true
-			return
-		end
-		result = res
-		done = true
-	end, 0)
+		end,
+		0
+	)
+
+	if not success or not request_id then
+		vim.notify("failed to get workspace/symbol", vim.log.levels.WARN)
+		return {}, false
+	end
 
 	vim.wait(opts.workspace_symbol_timeout_ms, function()
 		return done
@@ -145,6 +166,7 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 
 	if not done then
 		vim.notify("timed out waiting for workspace symbols", vim.log.levels.WARN)
+		gopls_client.cancel_request(request_id)
 		return {}, false
 	end
 
