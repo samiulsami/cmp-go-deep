@@ -1,38 +1,42 @@
 *cmp_go_deep-options*
+cmp_go_deep Options
+==============================================================================
 
 DESCRIPTION
-    This section describes the default options for the `cmp_go_deep` source that provides symbol
-    completions for Go, integrating with LSP (gopls) and Tree-sitter.
+  This section describes the default options for the `cmp_go_deep` GoLang source that provides deep symbol completions for unimported packages.
 
 DEFAULT OPTIONS
-    The following options can be configured:
+  The following options can be configured:
 
-    - `get_documentation_implementation`        *string*  
-        Whether to get documentation with LSP `textDocument/hover`, or extract it with regex.  
-        Default: `"hover"`  
-        Options: `"hover"`, `"regex"`
+  - `workspace_symbol_timeout_ms`:
+    Timeout in milliseconds for fetching workspace symbols.
+    Default: `2000`
 
-    - `documentation_wait_timeout_ms`           *integer*  
-        Timeout in milliseconds for getting documentation.  
-        Default: `500`  
-        Note: Only used when `get_documentation_implementation` is not `"regex"`.
+  - `documentation_wait_timeout_ms`:
+    Timeout in milliseconds for getting documentation.
+    Note: Only used when |cmp_go_deep-get_documentation_implementation| is not `"regex"`.
+    Default: `500`
 
-    - `add_import_statement_implementation`     *string*  
-        Whether to add import statement with `gopls.add_import`, or manually with the help of Tree-sitter.  
-        Default: `"treesitter"`  
-        Options: `"gopls"`, `"treesitter"`  
-        Note: The `gopls.add_import` command sometimes noops.
+  - `get_documentation_implementation`:
+    Whether to get documentation with LSP `'textDocument/hover'`, or extract it with regex.
+    Options: `"hover"` | `"regex"`
+    Default: `"hover"`
 
-    - `get_package_name_implementation`         *string*  
-        Whether to get the package name with `treesitter` or `regex`.  
-        Default: `"regex"`  
-        Options: `"treesitter"`, `"regex"`
-        Note: The `treesitter` implementation is more accurate, but slower.
-        Known issues: The `regex` implementation doesn't work for package names declared like: `/* hehe */ package xd`
+  - `add_import_statement_implementation`:
+    Whether to add import statement with `'gopls.add_import'`, or manually with the help of treesitter.
+    Options: `"gopls"` | `"treesitter"`
+    Note: The `gopls.add_import` command sometimes noops.
+    Default: `"treesitter"`
 
-    - `exclude_vendored_packages`               *boolean*  
-        Whether to exclude vendored packages from completions.  
-        Default: `false`  
-        Note: Enabling this option has a negligible performance impact.
+  - `get_package_name_implementation`:
+    Whether to get package name with `'treesitter'` or `'regex'`.
+    Known issue: The `regex` implementation doesn't work for package names declared like: `/* hehe */ package xd`.
+    Options: `"regex"` | `"treesitter"`
+    Default: `"regex"`
+
+  - `exclude_vendored_packages`:
+    Whether to exclude vendored packages from completions.
+    Note: Enabling this option has a negligible effect on performance.
+    Default: `false`
 
 ==============================================================================
