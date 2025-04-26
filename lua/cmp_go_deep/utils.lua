@@ -1,9 +1,16 @@
 local gopls_requests = require("cmp_go_deep.gopls_requests")
 local treesitter_implementations = require("cmp_go_deep.treesitter_implementations")
-
-local utils = {}
-
 local completionItemKind = vim.lsp.protocol.CompletionItemKind
+
+---@class cmp_go_deep.utils
+---@field symbol_to_completion_kind table<integer, integer>
+---@field get_cursor_prefix_word fun(): string
+---@field get_gopls_client fun(): vim.lsp.Client|nil
+---@field get_documentation fun(uri: string, range: lsp.Range, implementation: "hover"|"regex", timeout: integer): string|nil
+---@field get_imported_paths fun(bufnr: integer): table<string, boolean>
+---@field add_import_statement fun(bufnr: integer, import_path: string, implementation: "treesitter"|"gopls"): nil
+---@field get_package_name fun(uri: string, package_name_cache: table<string, string>, implementation: "treesitter"|"regex"): string|nil
+local utils = {}
 
 utils.symbol_to_completion_kind = {
 	[10] = completionItemKind.Enum,
