@@ -10,19 +10,19 @@ At the time of writing, the GoLang Language Server (```gopls@v0.18.1```) doesn't
 #### How?
 
 
-Query  ```gopls's``` ```workspace/symbol``` endpoint, convert the resulting symbols into ```completionItemKinds,``` filter the results to only include the ones that are unimported, then finally feed them back into ```nvim-cmp``` / ```blink.cmp```
+Query  ```gopls's``` ```workspace/symbol``` endpoint, convert the resulting symbols into ```completionItemKinds```, filter the results to only include the ones that are unimported, then finally feed them back into ```nvim-cmp``` / ```blink.cmp```
 
 ---
 #### Demo
 
-* Note: Due to how gopls works, completions for standard library packages are not available until at least one of them is manually imported.
+* Note: Due to how gopls indexes packages, completions for standard library packages are not available until at least one of them is manually imported.
 <p align="center">
   <img src="./demo.gif" alt="demo" />
 </p>
 
 ---
 ## Requirements
-- [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) + [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp)
+- [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) 
 
 OR
 - [blink.cmp](https://github.com/saghen/blink.cmp)
