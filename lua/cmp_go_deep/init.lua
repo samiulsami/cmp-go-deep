@@ -58,7 +58,9 @@ end
 ---@param callback fun(completion_item: lsp.CompletionItem|nil)
 function source:resolve(completion_item, callback)
 	local symbol = completion_item.data
+
 	if symbol == nil then
+		vim.notify("Warning: symbol data is missing", vim.log.levels.WARN)
 		return callback(nil)
 	end
 
@@ -66,21 +68,36 @@ function source:resolve(completion_item, callback)
 		return callback(completion_item)
 	end
 
-	---@type cmp_go_deep.Options
-	local opts = symbol.opts
+	if not type(symbol.location) == "table" then
+		vim.notify("Warning: symbol location is missing", vim.log.levels.WARN)
+		return callback(completion_item)
+	end
 
+	---@type lsp.Location
+	local location = symbol.location
+	if not location or not location.uri or not location.range then
+		vim.notify("Warning: symbol location is missing", vim.log.levels.WARN)
+		return callback(completion_item)
+	end
+
+	---@type cmp_go_deep.Options|nil
+	local opts = symbol.opts
+	if not opts then
+		vim.notify("Warning: symbol data is missing options", vim.log.levels.WARN)
+		return callback(completion_item)
+	end
+
+	---@type string|nil
 	local documentation = utils.get_documentation(
-		symbol.location.uri,
-		symbol.location.range,
+		location.uri,
+		location.range,
 		opts.get_documentation_implementation,
 		opts.documentation_wait_timeout_ms
 	)
-	if not documentation then
-		documentation = ""
-	end
+
 	completion_item.documentation = {
 		kind = "markdown",
-		value = documentation,
+		value = documentation or "",
 	}
 	callback(completion_item)
 end
