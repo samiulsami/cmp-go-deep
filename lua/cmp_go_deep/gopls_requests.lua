@@ -110,7 +110,7 @@ gopls_requests.textdocument_completion = function(opts, gopls_client, bufnr)
 		if opts.timeout_notifications then
 			vim.notify("timed out waiting for textDocument/completion", vim.log.levels.WARN)
 		end
-		-- gopls_client:cancel_request(request_id)
+		gopls_client:cancel_request(request_id)
 		return {}, false
 	end
 
@@ -170,7 +170,7 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 		if opts.timeout_notifications then
 			vim.notify("timed out waiting for workspace symbols", vim.log.levels.WARN)
 		end
-		-- gopls_client:cancel_request(request_id)
+		gopls_client:cancel_request(request_id)
 		return {}, false
 	end
 
@@ -182,7 +182,7 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 
 	---TODO: better type checking and error handling
 	for _, symbol in ipairs(result) do
-		local kind = utils.symbol_to_completion_kind[symbol.kind]
+		local kind = utils.symbol_to_completion_kind(symbol.kind)
 		if
 			kind
 			and symbol.name:match("^[A-Z]")

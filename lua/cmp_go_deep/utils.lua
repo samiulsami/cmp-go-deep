@@ -3,8 +3,8 @@ local treesitter_implementations = require("cmp_go_deep.treesitter_implementatio
 local completionItemKind = vim.lsp.protocol.CompletionItemKind
 
 ---@class cmp_go_deep.utils
----@field symbol_to_completion_kind table<integer, integer>
----@field get_cursor_prefix_word fun(): string
+---@field symbol_to_completion_kind fun(lspKind: lsp.SymbolKind): integer
+---@field get_cursor_prefix_word fun(win_id: integer): string
 ---@field get_gopls_client fun(): vim.lsp.Client|nil
 ---@field get_documentation fun(uri: string, range: lsp.Range, implementation: "hover"|"regex", timeout: integer): string|nil
 ---@field get_imported_paths fun(bufnr: integer): table<string, boolean>
@@ -12,7 +12,7 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_package_name fun(uri: string, package_name_cache: table<string, string>, implementation: "treesitter"|"regex"): string|nil
 local utils = {}
 
-utils.symbol_to_completion_kind = {
+local symbol_to_completion_kind = {
 	[10] = completionItemKind.Enum,
 	[11] = completionItemKind.Interface,
 	[12] = completionItemKind.Function,
@@ -22,9 +22,16 @@ utils.symbol_to_completion_kind = {
 	[26] = completionItemKind.TypeParameter,
 }
 
+---@param lspKind lsp.SymbolKind
+---@return integer
+utils.symbol_to_completion_kind = function(lspKind)
+	return symbol_to_completion_kind[lspKind]
+end
+
+---@param win_id integer
 ---@return string
-utils.get_cursor_prefix_word = function()
-	local pos = vim.api.nvim_win_get_cursor(0)
+utils.get_cursor_prefix_word = function(win_id)
+	local pos = vim.api.nvim_win_get_cursor(win_id)
 	if #pos < 2 then
 		return ""
 	end
