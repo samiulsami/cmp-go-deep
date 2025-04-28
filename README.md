@@ -76,7 +76,8 @@ OR
 ### Default options
 ```lua
 {
-	-- Workspace symbol timeout in milliseconds
+	-- Timeout in milliseconds for getting workspace symbols (unimported packages) from gopls.
+	-- Warning: Setting this too high causes a noticeable delay in huge codebases.
 	workspace_symbol_timeout_ms = 150,
 
 	-- Enable timeout notifications

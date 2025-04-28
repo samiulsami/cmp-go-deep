@@ -1,46 +1,59 @@
 *cmp_go_deep-options*
-cmp_go_deep Options
+
+cmp_go_deep Options                                   *cmp_go_deep-options*
+==============================================================================
+DESCRIPTION                                                    *cmp_go_deep-description*
+
+    This section describes the default options for the
+    |cmp_go_deep| Go source that provides deep symbol
+    completions for unimported packages.
+
+DEFAULT OPTIONS                                                *cmp_go_deep-default-options*
+
+    The following options can be configured:
+
+    • `workspace_symbol_timeout_ms`
+        Timeout (in milliseconds) for getting workspace symbols
+        (including unimported packages) from gopls.
+        *Warning:* Setting this too high can cause a noticeable
+        delay in large codebases.
+        Default: `150`
+
+    • `timeout_notifications`
+        Whether to enable timeout notifications on timeouts.
+        Default: `true`
+
+    • `documentation_wait_timeout_ms`
+        Timeout (in milliseconds) for getting documentation.
+        *Note:* Only used when |cmp_go_deep-get_documentation_implementation|
+        is not `"regex"`.
+        Default: `500`
+
+    • `get_documentation_implementation`
+        Strategy for getting documentation: either using
+        LSP `'textDocument/hover'`, or extracting it with regex.
+        Options: `"hover"` | `"regex"`
+        Default: `"hover"`
+
+    • `add_import_statement_implementation`
+        Strategy for adding import statements: either via
+        `'gopls.add_import'`, or manually with Treesitter.
+        Options: `"gopls"` | `"treesitter"`
+        *Note:* The `gopls.add_import` command may sometimes noop.
+        Default: `"treesitter"`
+
+    • `get_package_name_implementation`
+        Strategy for retrieving package names: either using
+        Treesitter or Regex.
+        Options: `"regex"` | `"treesitter"`
+        *Known Issue:* The `regex` implementation fails if
+        package declarations have inline comments like:
+        `/* hehe */ package xd`.
+        Default: `"regex"`
+
+    • `exclude_vendored_packages`
+        Whether to exclude vendored packages from completions.
+        *Note:* Enabling this has a negligible performance impact.
+        Default: `false`
 ==============================================================================
 
-DESCRIPTION
-  This section describes the default options for the `cmp_go_deep` GoLang source that provides deep symbol completions for unimported packages.
-
-DEFAULT OPTIONS
-  The following options can be configured:
-
-  - `workspace_symbol_timeout_ms`:
-    Timeout in milliseconds for fetching workspace symbols.
-    Default: `150`
-
-  - `timeout_notifications`:
-    Whether to enable timeout notifications.
-    Default: `true`
-
-  - `documentation_wait_timeout_ms`:
-    Timeout in milliseconds for getting documentation.
-    Note: Only used when |cmp_go_deep-get_documentation_implementation| is not `"regex"`.
-    Default: `500`
-
-  - `get_documentation_implementation`:
-    Whether to get documentation with LSP `'textDocument/hover'`, or extract it with regex.
-    Options: `"hover"` | `"regex"`
-    Default: `"hover"`
-
-  - `add_import_statement_implementation`:
-    Whether to add import statement with `'gopls.add_import'`, or manually with the help of treesitter.
-    Options: `"gopls"` | `"treesitter"`
-    Note: The `gopls.add_import` command sometimes noops.
-    Default: `"treesitter"`
-
-  - `get_package_name_implementation`:
-    Whether to get package name with `'treesitter'` or `'regex'`.
-    Known issue: The `regex` implementation doesn't work for package names declared like: `/* hehe */ package xd`.
-    Options: `"regex"` | `"treesitter"`
-    Default: `"regex"`
-
-  - `exclude_vendored_packages`:
-    Whether to exclude vendored packages from completions.
-    Note: Enabling this option has a negligible effect on performance.
-    Default: `false`
-
-==============================================================================
