@@ -71,20 +71,16 @@ end
 ---@param opts cmp_go_deep.Options
 ---@param gopls_client vim.lsp.Client | nil
 ---@param bufnr integer
----@param utils cmp_go_deep.utils
 ---@return table<integer, lsp.CompletionItem>, boolean
-gopls_requests.textdocument_completion = function(opts, gopls_client, bufnr, utils)
+gopls_requests.textdocument_completion = function(opts, gopls_client, bufnr)
 	if gopls_client == nil then
 		vim.notify("gopls client is nil", vim.log.levels.WARN)
 		return {}, false
 	end
 
-	_ = utils
-
 	local result = {}
 	local done = false
-	--- TODO: determine this dynamically
-	local is_incomplete = false
+	local is_incomplete = false --- TODO: determine this dynamically
 	local cursor = vim.api.nvim_win_get_cursor(0)
 	local position = { line = cursor[1] - 1, character = cursor[2] }
 
@@ -111,12 +107,15 @@ gopls_requests.textdocument_completion = function(opts, gopls_client, bufnr, uti
 	end, 10)
 
 	if not done then
-		vim.notify("timed out waiting for textDocument/completion", vim.log.levels.WARN)
-		gopls_client:cancel_request(request_id)
+		if opts.timeout_notifications then
+			vim.notify("timed out waiting for textDocument/completion", vim.log.levels.WARN)
+		end
+		-- gopls_client:cancel_request(request_id)
 		return {}, false
 	end
 
 	local items = {}
+	---TODO: better type checking and error handling
 	for _, item in ipairs(result) do
 		table.insert(items, {
 			label = item.label,
@@ -146,7 +145,7 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 	local done = false
 	local success, request_id = gopls_client:request(
 		"workspace/symbol",
-		{ query = utils.get_cursor_prefix_word() },
+		{ query = utils.get_cursor_prefix_word(0) },
 		function(_, res)
 			if not res then
 				done = true
@@ -168,8 +167,10 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 	end, 10)
 
 	if not done then
-		vim.notify("timed out waiting for workspace symbols", vim.log.levels.WARN)
-		gopls_client:cancel_request(request_id)
+		if opts.timeout_notifications then
+			vim.notify("timed out waiting for workspace symbols", vim.log.levels.WARN)
+		end
+		-- gopls_client:cancel_request(request_id)
 		return {}, false
 	end
 
@@ -179,14 +180,15 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 	local is_incomplete = false
 	local imported_paths = utils.get_imported_paths(bufnr)
 
+	---TODO: better type checking and error handling
 	for _, symbol in ipairs(result) do
 		local kind = utils.symbol_to_completion_kind[symbol.kind]
 		if
-			kind ~= nil
+			kind
 			and symbol.name:match("^[A-Z]")
 			and not imported_paths[symbol.containerName]
 			and not symbol.location.uri:match("_test%.go$")
-			and not (opts.exclude_vendored_packages and symbol.containerName:match("/vendor/"))
+			and not (opts.exclude_vendored_packages and symbol.location.uri:match("/vendor/"))
 			and symbol.location.uri ~= vim.uri_from_bufnr(bufnr)
 		then
 			local package_name =

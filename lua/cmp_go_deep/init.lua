@@ -3,6 +3,7 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 
 ---@class cmp_go_deep.Options
 ---@field public textdocument_completion boolean | nil
+---@field public timeout_notifications boolean | nil
 ---@field public get_documentation_implementation "hover" | "regex" | nil
 ---@field public add_import_statement_implementation "treesitter" | "gopls" | nil
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil
@@ -14,12 +15,13 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 ---@type cmp_go_deep.Options
 local default_options = {
 	textdocument_completion = false,
+	timeout_notifications = true,
 	get_documentation_implementation = "hover",
 	add_import_statement_implementation = "treesitter",
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 500,
-	workspace_symbol_timeout_ms = 2000,
+	workspace_symbol_timeout_ms = 150,
 	textdocument_completion_timeout_ms = 500,
 }
 
@@ -41,7 +43,17 @@ source.get_trigger_characters = function()
 end
 
 source.complete = function(_, params, callback)
-	local opts = vim.tbl_deep_extend("force", default_options, params.option or {}, params.opts or {})
+	local opts = vim.deepcopy(default_options, false)
+	local extend_non_nil = function(old, new)
+		for k, v in pairs(new) do
+			if v ~= nil then
+				old[k] = v
+			end
+		end
+		return old
+	end
+	opts = extend_non_nil(opts, params.option or {})
+	opts = extend_non_nil(opts, params.opts or {})
 
 	local gopls_client = utils.get_gopls_client()
 	if not gopls_client then

@@ -10,7 +10,11 @@ DEFAULT OPTIONS
 
   - `workspace_symbol_timeout_ms`:
     Timeout in milliseconds for fetching workspace symbols.
-    Default: `2000`
+    Default: `150`
+
+  - `timeout_notifications`:
+    Whether to enable timeout notifications.
+    Default: `true`
 
   - `documentation_wait_timeout_ms`:
     Timeout in milliseconds for getting documentation.

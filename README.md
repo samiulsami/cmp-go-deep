@@ -77,7 +77,10 @@ OR
 ```lua
 {
 	-- Workspace symbol timeout in milliseconds
-	workspace_symbol_timeout_ms = 2000,
+	workspace_symbol_timeout_ms = 150,
+
+	-- Enable timeout notifications
+	timeout_notifications = true,
 
 	-- Timeout in milliseconds for getting documentation
 	-- Note: Only used when `get_documentation_implementation` is not `"regex"`.
