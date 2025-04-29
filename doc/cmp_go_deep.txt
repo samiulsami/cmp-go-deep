@@ -1,5 +1,3 @@
-*cmp_go_deep-options*
-
 cmp_go_deep Options                                   *cmp_go_deep-options*
 ==============================================================================
 DESCRIPTION                                                    *cmp_go_deep-description*
@@ -15,7 +13,7 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
     • `workspace_symbol_timeout_ms`
         Timeout (in milliseconds) for getting workspace symbols
         (including unimported packages) from gopls.
-        *Warning:* Setting this too high can cause a noticeable
+        Warning: Setting this too high can cause a noticeable
         delay in large codebases.
         Default: `150`
 
@@ -25,7 +23,7 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
 
     • `documentation_wait_timeout_ms`
         Timeout (in milliseconds) for getting documentation.
-        *Note:* Only used when |cmp_go_deep-get_documentation_implementation|
+        Note: Only used when |cmp_go_deep-get_documentation_implementation|
         is not `"regex"`.
         Default: `500`
 
@@ -35,25 +33,17 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
         Options: `"hover"` | `"regex"`
         Default: `"hover"`
 
-    • `add_import_statement_implementation`
-        Strategy for adding import statements: either via
-        `'gopls.add_import'`, or manually with Treesitter.
-        Options: `"gopls"` | `"treesitter"`
-        *Note:* The `gopls.add_import` command may sometimes noop.
-        Default: `"treesitter"`
-
     • `get_package_name_implementation`
         Strategy for retrieving package names: either using
         Treesitter or Regex.
         Options: `"regex"` | `"treesitter"`
-        *Known Issue:* The `regex` implementation fails if
+        Known Issue: The `regex` implementation fails if
         package declarations have inline comments like:
         `/* hehe */ package xd`.
         Default: `"regex"`
 
     • `exclude_vendored_packages`
         Whether to exclude vendored packages from completions.
-        *Note:* Enabling this has a negligible performance impact.
+        Note: Enabling this has a negligible performance impact.
         Default: `false`
 ==============================================================================
-
