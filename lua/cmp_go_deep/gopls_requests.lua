@@ -211,14 +211,16 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 				)
 			end
 
-			package_name = utils.get_unique_package_alias(used_aliases, package_name)
+			local package_alias = utils.get_unique_package_alias(used_aliases, package_name)
+			if package_alias ~= package_name then
+				symbol.package_alias = package_alias
+			end
 			symbol.bufnr = bufnr
 			symbol.opts = opts
-			symbol.packageName = package_name
 			symbol.is_unimported = true
 
 			table.insert(items, {
-				label = package_name .. "." .. symbol.name,
+				label = package_alias .. "." .. symbol.name,
 				sortText = symbol.name,
 				kind = kind,
 				detail = '"' .. symbol.containerName .. '"',

@@ -24,12 +24,18 @@ local function get_root_node(bufnr)
 end
 
 ---@param bufnr (integer)
----@param package_alias string
+---@param package_alias string | nil
 ---@param import_path string
 treesitter_implementations.add_import_statement = function(bufnr, package_alias, import_path)
 	local root = get_root_node(bufnr)
 	if root == nil then
 		return
+	end
+
+	if not package_alias then
+		package_alias = ""
+	else
+		package_alias = package_alias .. " "
 	end
 
 	---@type TSNode | nil
@@ -55,7 +61,7 @@ treesitter_implementations.add_import_statement = function(bufnr, package_alias,
 				vim.api.nvim_buf_set_lines(bufnr, start_row, end_row + 1, false, {
 					"import (",
 					"\t" .. vim.treesitter.get_node_text(child, bufnr),
-					"\t" .. package_alias .. ' "' .. import_path .. '"',
+					"\t" .. package_alias .. '"' .. import_path .. '"',
 					")",
 				})
 				return
@@ -68,7 +74,7 @@ treesitter_implementations.add_import_statement = function(bufnr, package_alias,
 			return
 		end
 
-		table.insert(lines, #lines, "\t" .. package_alias .. ' "' .. import_path .. '"')
+		table.insert(lines, #lines, "\t" .. package_alias .. '"' .. import_path .. '"')
 		vim.api.nvim_buf_set_lines(bufnr, start_row, end_row + 1, false, lines)
 	else
 		local insert_line = 0
@@ -82,7 +88,7 @@ treesitter_implementations.add_import_statement = function(bufnr, package_alias,
 		vim.api.nvim_buf_set_lines(bufnr, insert_line, insert_line, false, {
 			"",
 			"import (",
-			"\t" .. package_alias .. ' "' .. import_path .. '"',
+			"\t" .. package_alias .. '"' .. import_path .. '"',
 			")",
 			"",
 		})

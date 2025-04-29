@@ -118,7 +118,7 @@ function source:execute(completion_item, callback)
 	end
 
 	local import_path = symbol.containerName
-	local package_name = symbol.packageName
+	local package_name = symbol.package_alias
 
 	if symbol.is_unimported and import_path and vim.bo.filetype == "go" then
 		utils.add_import_statement(symbol.bufnr, package_name, import_path)
