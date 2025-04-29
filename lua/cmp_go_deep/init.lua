@@ -11,7 +11,6 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 
 ---@type cmp_go_deep.Options
 local default_options = {
-	textdocument_completion = false,
 	timeout_notifications = true,
 	get_documentation_implementation = "hover",
 	get_package_name_implementation = "regex",
