@@ -2,27 +2,22 @@ local utils = require("cmp_go_deep.utils")
 local gopls_requests = require("cmp_go_deep.gopls_requests")
 
 ---@class cmp_go_deep.Options
----@field public textdocument_completion boolean | nil
 ---@field public timeout_notifications boolean | nil
 ---@field public get_documentation_implementation "hover" | "regex" | nil
----@field public add_import_statement_implementation "treesitter" | "gopls" | nil
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil
 ---@field public exclude_vendored_packages boolean | nil
 ---@field public documentation_wait_timeout_ms integer | nil
 ---@field public workspace_symbol_timeout_ms integer | nil
----@field public textdocument_completion_timeout_ms integer | nil
 
 ---@type cmp_go_deep.Options
 local default_options = {
 	textdocument_completion = false,
 	timeout_notifications = true,
 	get_documentation_implementation = "hover",
-	add_import_statement_implementation = "treesitter",
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 500,
 	workspace_symbol_timeout_ms = 150,
-	textdocument_completion_timeout_ms = 500,
 }
 
 local source = {}
@@ -122,12 +117,11 @@ function source:execute(completion_item, callback)
 		return
 	end
 
-	---@type cmp_go_deep.Options
-	local opts = symbol.opts
-
 	local import_path = symbol.containerName
+	local package_name = symbol.packageName
+
 	if symbol.is_unimported and import_path and vim.bo.filetype == "go" then
-		utils.add_import_statement(symbol.bufnr, import_path, opts.add_import_statement_implementation)
+		utils.add_import_statement(symbol.bufnr, package_name, import_path)
 	else
 		vim.notify("Import path not found", vim.log.levels.WARN)
 	end

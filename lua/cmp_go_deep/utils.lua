@@ -5,10 +5,11 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@class cmp_go_deep.utils
 ---@field symbol_to_completion_kind fun(lspKind: lsp.SymbolKind): integer
 ---@field get_cursor_prefix_word fun(win_id: integer): string
+---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, import_name: string): string
 ---@field get_gopls_client fun(): vim.lsp.Client|nil
 ---@field get_documentation fun(uri: string, range: lsp.Range, implementation: "hover"|"regex", timeout: integer): string|nil
----@field get_imported_paths fun(bufnr: integer): table<string, boolean>
----@field add_import_statement fun(bufnr: integer, import_path: string, implementation: "treesitter"|"gopls"): nil
+---@field get_imported_paths fun(bufnr: integer): table<string, string>
+---@field add_import_statement fun(bufnr: integer, package_name: string, import_path: string): nil
 ---@field get_package_name fun(uri: string, package_name_cache: table<string, string>, implementation: "treesitter"|"regex"): string|nil
 local utils = {}
 
@@ -68,7 +69,7 @@ utils.get_documentation = function(uri, range, implementation, timeout)
 		return gopls_requests.get_documentation(utils.get_gopls_client(), timeout, uri, range)
 	end
 
-	--fallback to regex
+	--default to regex
 	local filepath = vim.uri_to_fname(uri)
 	local bufnr = vim.fn.bufadd(filepath)
 	vim.fn.bufload(bufnr)
@@ -99,20 +100,29 @@ utils.get_documentation = function(uri, range, implementation, timeout)
 end
 
 ---@param bufnr (integer)
----@return table<string, boolean>
+---@return table<string, string>
 utils.get_imported_paths = function(bufnr)
 	return treesitter_implementations.get_imported_paths(bufnr)
 end
 
 ---@param bufnr (integer)
+---@param package_alias string
 ---@param import_path string
----@param implementation "treesitter" | "gopls"
-utils.add_import_statement = function(bufnr, import_path, implementation)
-	if implementation == "gopls" then
-		gopls_requests.add_import_statement(utils.get_gopls_client(), bufnr, import_path)
-		return
+utils.add_import_statement = function(bufnr, package_alias, import_path)
+	treesitter_implementations.add_import_statement(bufnr, package_alias, import_path)
+end
+
+---@param used_aliases table<string, boolean>
+---@param pacakge_name string
+---@return string
+utils.get_unique_package_alias = function(used_aliases, pacakge_name)
+	local alias = pacakge_name
+	local i = 2
+	while used_aliases[alias] do
+		alias = pacakge_name .. i
+		i = i + 1
 	end
-	treesitter_implementations.add_import_statement(bufnr, import_path)
+	return alias
 end
 
 ---@param uri string
@@ -139,7 +149,7 @@ utils.get_package_name = function(uri, package_name_cache, implementation)
 		return ""
 	end
 
-	--Fallback to regex
+	--default to regex
 	--- FIXME: regex implementation doesn't work for package declarations like: "/* hehe */ package xd"
 	local fname = vim.uri_to_fname(uri)
 	if not fname then

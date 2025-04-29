@@ -47,6 +47,7 @@ end
 ---@param bufnr (integer)
 ---@param import_path string
 ---FIXME: sometimes fails (noop) for vendored pacakges
+---@deprecated
 gopls_requests.add_import_statement = function(gopls_client, bufnr, import_path)
 	if gopls_client == nil then
 		vim.notify("gopls client is nil", vim.log.levels.WARN)
@@ -180,6 +181,12 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 	local is_incomplete = false
 	local imported_paths = utils.get_imported_paths(bufnr)
 
+	---@type table<string, boolean>
+	local used_aliases = {}
+	for _, v in pairs(imported_paths) do
+		used_aliases[v] = true
+	end
+
 	---TODO: better type checking and error handling
 	for _, symbol in ipairs(result) do
 		local kind = utils.symbol_to_completion_kind(symbol.kind)
@@ -194,7 +201,7 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 			local package_name =
 				utils.get_package_name(symbol.location.uri, package_name_cache, opts.get_package_name_implementation)
 			if package_name == nil then
-				package_name = symbol.containerName:match("([^/]+)$")
+				package_name = symbol.containerName:match("([^/]+)$"):gsub("-", "_")
 				vim.notify(
 					"Package name not found for uri: "
 						.. symbol.location.uri
@@ -204,9 +211,12 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 				)
 			end
 
+			package_name = utils.get_unique_package_alias(used_aliases, package_name)
 			symbol.bufnr = bufnr
 			symbol.opts = opts
+			symbol.packageName = package_name
 			symbol.is_unimported = true
+
 			table.insert(items, {
 				label = package_name .. "." .. symbol.name,
 				sortText = symbol.name,
