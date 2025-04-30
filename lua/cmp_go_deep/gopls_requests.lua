@@ -2,13 +2,13 @@ local gopls_requests = {}
 --Max workspace symbols that gopls returns in one query https://github.com/golang/tools/blob/de18b0bf1345e2dda43ba4fa57605b4ccbbe67ab/gopls/internal/golang/workspace_symbol.go#L29-L29
 local gopls_max_item_limit = 100
 
+---@param opts cmp_go_deep.Options
 ---@param gopls_client vim.lsp.Client | nil
----@param timeout integer
 ---@param uri string
 ---@param range lsp.Range
 ---@return string | nil
 ---TODO: try completionItem/resolve instead
-gopls_requests.get_documentation = function(gopls_client, timeout, uri, range)
+gopls_requests.get_documentation = function(opts, gopls_client, uri, range)
 	if gopls_client == nil then
 		vim.notify("gopls client is nil", vim.log.levels.WARN)
 		return nil
@@ -32,11 +32,11 @@ gopls_requests.get_documentation = function(gopls_client, timeout, uri, range)
 		end
 	end)
 
-	vim.wait(timeout, function()
+	vim.wait(opts.documentation_wait_timeout_ms, function()
 		return markdown ~= ""
 	end, 10)
 
-	if markdown == "" then
+	if markdown == "" and opts.timeout_notifications then
 		vim.notify("timed out waiting for documentation", vim.log.levels.WARN)
 	end
 
@@ -44,30 +44,33 @@ gopls_requests.get_documentation = function(gopls_client, timeout, uri, range)
 end
 
 ---@param opts cmp_go_deep.Options
+---@param cache cmp_go_deep.DB
 ---@param gopls_client vim.lsp.Client | nil
 ---@param bufnr (integer)
 ---@param utils cmp_go_deep.utils
 ---@return table<string, any>, boolean
-gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
+gopls_requests.workspace_symbols = function(opts, cache, gopls_client, bufnr, utils)
 	if gopls_client == nil then
 		vim.notify("gopls client is nil", vim.log.levels.WARN)
 		return {}, false
 	end
 
-	local result = {}
+	local project_path = vim.fn.getcwd()
+	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
 	local done = false
+
 	local success, request_id = gopls_client:request(
 		"workspace/symbol",
 		{ query = utils.get_cursor_prefix_word(0) },
-		function(_, res)
-			if not res then
+		function(_, result)
+			if not result then
 				done = true
 				return
 			end
-			result = res
+			cache:save(project_path, cursor_prefix_word, result)
 			done = true
 		end,
-		0
+		bufnr
 	)
 
 	if not success or not request_id then
@@ -79,12 +82,8 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 		return done
 	end, 10)
 
-	if not done then
-		if opts.timeout_notifications then
-			vim.notify("timed out waiting for workspace symbols", vim.log.levels.WARN)
-		end
-		gopls_client:cancel_request(request_id)
-		return {}, false
+	if not done and opts.debug then
+		vim.notify("timed out waiting for workspace symbols", vim.log.levels.WARN)
 	end
 
 	local items = {}
@@ -99,6 +98,11 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 		used_aliases[v] = true
 	end
 
+	local result = cache:load(project_path, cursor_prefix_word)
+	if result == nil then
+		return {}, false
+	end
+
 	---TODO: better type checking and error handling
 	for _, symbol in ipairs(result) do
 		local kind = utils.symbol_to_completion_kind(symbol.kind)
@@ -110,8 +114,7 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 			and not (opts.exclude_vendored_packages and symbol.location.uri:match("/vendor/"))
 			and symbol.location.uri ~= vim.uri_from_bufnr(bufnr)
 		then
-			local package_name =
-				utils.get_package_name(symbol.location.uri, package_name_cache, opts.get_package_name_implementation)
+			local package_name = utils.get_package_name(opts, symbol.location.uri, package_name_cache)
 			if package_name == nil then
 				package_name = symbol.containerName:match("([^/]+)$"):gsub("-", "_")
 				vim.notify(
@@ -129,7 +132,6 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, utils)
 			end
 			symbol.bufnr = bufnr
 			symbol.opts = opts
-			symbol.is_unimported = true
 
 			table.insert(items, {
 				label = package_alias .. "." .. symbol.name,

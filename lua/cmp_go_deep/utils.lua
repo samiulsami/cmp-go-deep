@@ -7,10 +7,10 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_cursor_prefix_word fun(win_id: integer): string
 ---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, package_alias: string): string
 ---@field get_gopls_client fun(): vim.lsp.Client|nil
----@field get_documentation fun(uri: string, range: lsp.Range, implementation: "hover"|"regex", timeout: integer): string|nil
+---@field get_documentation fun(opts: cmp_go_deep.Options, uri: string, range: lsp.Range): string|nil
 ---@field get_imported_paths fun(bufnr: integer): table<string, string>
 ---@field add_import_statement fun(bufnr: integer, package_name: string | nil, import_path: string): nil
----@field get_package_name fun(uri: string, package_name_cache: table<string, string>, implementation: "treesitter"|"regex"): string|nil
+---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil
 local utils = {}
 
 local symbol_to_completion_kind = {
@@ -59,14 +59,13 @@ utils.get_gopls_client = function()
 	return nil
 end
 
+---@param opts cmp_go_deep.Options
 ---@param uri string
 ---@param range lsp.Range
----@param implementation "hover" | "regex"
----@param timeout integer
 ---@return string | nil
-utils.get_documentation = function(uri, range, implementation, timeout)
-	if implementation == "hover" then
-		return gopls_requests.get_documentation(utils.get_gopls_client(), timeout, uri, range)
+utils.get_documentation = function(opts, uri, range)
+	if opts.get_documentation_implementation == "hover" then
+		return gopls_requests.get_documentation(opts, utils.get_gopls_client(), uri, range)
 	end
 
 	--default to regex
@@ -125,12 +124,12 @@ utils.get_unique_package_alias = function(used_aliases, package_alias)
 	return alias
 end
 
+---@param opts cmp_go_deep.Options
 ---@param uri string
 ---@param package_name_cache table<string, string>
----@param implementation "treesitter" | "regex"
 ---@return string|nil
 --- TODO: consider asking gopls for the package name, but this is probably faster
-utils.get_package_name = function(uri, package_name_cache, implementation)
+utils.get_package_name = function(opts, uri, package_name_cache)
 	local cached = package_name_cache[uri]
 	if cached then
 		if cached == "" then
@@ -139,7 +138,7 @@ utils.get_package_name = function(uri, package_name_cache, implementation)
 		return cached
 	end
 
-	if implementation == "treesitter" then
+	if opts.get_package_name_implementation == "treesitter" then
 		local pkg = treesitter_implementations.get_package_name(uri)
 		if pkg then
 			package_name_cache[uri] = pkg

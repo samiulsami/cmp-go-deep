@@ -13,6 +13,7 @@ At the time of writing, the GoLang Language Server (```gopls@v0.18.1```) doesn't
 Query  ```gopls's``` ```workspace/symbol``` endpoint, convert the resulting symbols into ```completionItemKinds```, filter the results to only include the ones that are unimported, then finally feed them back into ```nvim-cmp``` / ```blink.cmp```
 
 ---
+⚠️ <i> it might take a while for the packages to be indexed in huge codebases </i>
 #### Demo
 
 * Note: Due to how gopls indexes packages, completions for standard library packages are not available until at least one of them is manually imported.
@@ -34,12 +35,14 @@ OR
 {
     "hrsh7th/nvim-cmp",
     dependencies = {
-        { "samiulsami/cmp-go-deep" },
+	{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
     },
     ...
     require("cmp").setup({
         sources = {{
             name = "go_deep",
+            ---@module "cmp_go_deep"
+	    ---@type cmp_go_deep.Options
             option = {
                 -- See below for configuration options
             },
@@ -52,7 +55,7 @@ OR
 {
 	"saghen/blink.cmp",
 	dependencies = {
-		{ "samiulsami/cmp-go-deep" },
+		{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
 		{ "saghen/blink.compat" },
 	},
 	opts = {
@@ -64,6 +67,8 @@ OR
 				go_deep = {
 					name = "go_deep",
 					module = "blink.compat.source",
+					---@module "cmp_go_deep"
+					---@type cmp_go_deep.Options
 					opts = {
 						-- See below for configuration options
 					},
@@ -76,31 +81,43 @@ OR
 ### Default options
 ```lua
 {
-	-- Timeout in milliseconds for getting workspace symbols from gopls.
-	-- Warning: Setting this too high causes a noticeable delay in huge codebases.
-	workspace_symbol_timeout_ms = 150,
-
-	-- Enable/disable timeout notifications
+	-- Enable/disable timeout notifications.
 	timeout_notifications = true,
 
-	-- Timeout in milliseconds for getting documentation
-	-- Note: Only used when `get_documentation_implementation` is not `"regex"`.
-	documentation_wait_timeout_ms = 200,
-
-	-- Whether to get documentation with lsp 'textDocument/hover', or extract it with regex
-	-- options: "hover" | "regex"
+	-- How to get documentation for Go symbols.
+	-- options:
+	-- "hover" - LSP 'textDocument/hover'. Prettier.
+	-- "regex" - faster and simpler.
 	get_documentation_implementation = "hover",
 
-	-- Whether to get package name with 'treesitter' or 'regex'
-	-- Known issue: The `regex` implementation doesn't work for package names declared like: `/* hehe */ package xd`
+	-- How to get the package names.
+	-- options:
+	-- "treesitter" - accurate but slower.
+	-- "regex" - faster but can fail in edge cases.
 	get_package_name_implementation = "regex",
 
-	-- Whether to exclude vendored packages from completions
-	-- Note: Enabling this option has a negligible effect on performance.
+	-- Whether to exclude vendored packages from completions.
 	exclude_vendored_packages = false,
+
+	-- Timeout in milliseconds for fetching documentation.
+	-- Controls how long to wait for documentation to load.
+	documentation_wait_timeout_ms = 500,
+
+	-- Timeout in milliseconds for getting workspace symbols from gopls.
+	-- Warning: Setting this too high causes noticeable stuttering.
+	workspace_symbol_timeout_ms = 100,
+
+	-- Path to store the SQLite database
+	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"
+	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
+
+	-- Maximum size for the SQLite database in bytes.
+	db_size_limit_bytes = 100 * 1024 * 1024, -- 100MB
 }
 ```
 ---
 #### TODO
-- [ ] Cache results for faster completions.
+- [x] Cache results for faster completions.
+- [ ] Cross-project cache sharing for internal packages
+- [ ] Better memory usage
 - [ ] Remove the indirect dependency on ```cmp-nvim-lsp``` or ```blink.cmp's``` LSP source.
