@@ -1,3 +1,7 @@
+---@class cmp_go_deep.gopls_requests
+---@field get_documentation fun(opts: cmp_go_deep.Options, gopls_client: vim.lsp.Client | nil, uri: string, range: lsp.Range): string|nil
+---@field debounced_request fun(request_state: cmp_go_deep.utils.request_state, ...)
+---@field workspace_symbols fun(opts: cmp_go_deep.Options, cache: cmp_go_deep.DB, gopls_client: vim.lsp.Client | nil, callback: fun(items: lsp.CompletionItem[], isIncomplete: boolean), bufnr: integer, utils: cmp_go_deep.utils): nil
 local gopls_requests = {}
 --Max workspace symbols that gopls returns in one query https://github.com/golang/tools/blob/de18b0bf1345e2dda43ba4fa57605b4ccbbe67ab/gopls/internal/golang/workspace_symbol.go#L29-L29
 local gopls_max_item_limit = 100
@@ -46,36 +50,29 @@ end
 ---@param opts cmp_go_deep.Options
 ---@param cache cmp_go_deep.DB
 ---@param gopls_client vim.lsp.Client | nil
+---@param callback any
 ---@param bufnr (integer)
 ---@param utils cmp_go_deep.utils
----@return table<string, any>, boolean
-gopls_requests.workspace_symbols = function(opts, cache, gopls_client, bufnr, utils)
+gopls_requests.workspace_symbols = function(opts, cache, gopls_client, callback, bufnr, utils)
 	if gopls_client == nil then
 		vim.notify("gopls client is nil", vim.log.levels.WARN)
-		return {}, false
+		return callback({ items = {}, isIncomplete = false })
 	end
 
 	local project_path = vim.fn.getcwd()
 	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
+
 	local done = false
-
-	local success, request_id = gopls_client:request(
-		"workspace/symbol",
-		{ query = utils.get_cursor_prefix_word(0) },
-		function(_, result)
-			if not result then
-				done = true
-				return
-			end
-			cache:save(project_path, cursor_prefix_word, result)
+	local success, _ = gopls_client:request("workspace/symbol", { query = cursor_prefix_word }, function(_, result)
+		if not result then
 			done = true
-		end,
-		bufnr
-	)
-
-	if not success or not request_id then
-		vim.notify("failed to get workspace/symbol", vim.log.levels.WARN)
-		return {}, false
+			return
+		end
+		cache:save(project_path, cursor_prefix_word, result)
+		done = true
+	end, bufnr)
+	if not success then
+		vim.notify("gopls 'workspace/symbol' request failed", vim.log.levels.WARN)
 	end
 
 	vim.wait(opts.workspace_symbol_timeout_ms, function()
@@ -98,9 +95,16 @@ gopls_requests.workspace_symbols = function(opts, cache, gopls_client, bufnr, ut
 		used_aliases[v] = true
 	end
 
-	local result = cache:load(project_path, cursor_prefix_word)
+	---@type table?
+	local result = {}
+	local current_prefix = cursor_prefix_word
+	while (result == nil or #result == 0) and #current_prefix > 0 do
+		result = cache:load(project_path, current_prefix)
+		current_prefix = current_prefix:sub(1, #current_prefix - 1)
+	end
+
 	if result == nil then
-		return {}, false
+		return callback({ items = {}, isIncomplete = false })
 	end
 
 	---TODO: better type checking and error handling
@@ -144,8 +148,7 @@ gopls_requests.workspace_symbols = function(opts, cache, gopls_client, bufnr, ut
 	end
 
 	is_incomplete = #result >= gopls_max_item_limit
-
-	return items, is_incomplete
+	return callback({ items = items, isIncomplete = is_incomplete })
 end
 
 return gopls_requests

@@ -103,9 +103,8 @@ OR
 	-- Controls how long to wait for documentation to load.
 	documentation_wait_timeout_ms = 500,
 
-	-- Timeout in milliseconds for getting workspace symbols from gopls.
-	-- Warning: Setting this too high causes noticeable stuttering.
-	workspace_symbol_timeout_ms = 100,
+	-- maximum time (in milliseconds) to wait for workspace/symbols before defaulting to cached results
+	workspace_symbol_timeout_ms = 1000,
 
 	-- Path to store the SQLite database
 	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"

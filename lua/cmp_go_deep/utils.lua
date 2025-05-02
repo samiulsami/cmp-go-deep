@@ -3,6 +3,7 @@ local treesitter_implementations = require("cmp_go_deep.treesitter_implementatio
 local completionItemKind = vim.lsp.protocol.CompletionItemKind
 
 ---@class cmp_go_deep.utils
+---@field debounce fun(fn: fun(...), delay_ms: integer): fun(request_state: cmp_go_deep.utils.request_state, ...)
 ---@field symbol_to_completion_kind fun(lspKind: lsp.SymbolKind): integer
 ---@field get_cursor_prefix_word fun(win_id: integer): string
 ---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, package_alias: string): string
@@ -13,6 +14,9 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil
 local utils = {}
 
+---@class cmp_go_deep.utils.request_state
+---@field cancelled boolean
+
 local symbol_to_completion_kind = {
 	[10] = completionItemKind.Enum,
 	[11] = completionItemKind.Interface,
@@ -22,6 +26,33 @@ local symbol_to_completion_kind = {
 	[23] = completionItemKind.Struct,
 	[26] = completionItemKind.TypeParameter,
 }
+
+---@param fn fun( ...)
+---@param delay_ms integer
+---@return fun(request_state: cmp_go_deep.utils.request_state, ...)
+utils.debounce = function(fn, delay_ms)
+	local timer = vim.uv.new_timer()
+	local prev_args = nil
+	---@type cmp_go_deep.utils.request_state
+	local prev_request_state = nil
+
+	return function(request_state, ...)
+		if timer:is_active() and prev_request_state then
+			timer:stop()
+			prev_request_state.cancelled = true
+		end
+		prev_request_state = request_state
+
+		local args = { ... }
+		prev_args = args
+		timer:start(delay_ms, 0, function()
+			vim.schedule(function()
+				local cur_args = prev_args
+				fn(unpack(cur_args))
+			end)
+		end)
+	end
+end
 
 ---@param lspKind lsp.SymbolKind
 ---@return integer
