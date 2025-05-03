@@ -11,7 +11,7 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_documentation fun(opts: cmp_go_deep.Options, uri: string, range: lsp.Range): string|nil
 ---@field get_imported_paths fun(bufnr: integer): table<string, string>
 ---@field add_import_statement fun(bufnr: integer, package_name: string | nil, import_path: string): nil
----@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil
+---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
 ---@field process_items fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, gopls_max_item_limit: number): nil
 local utils = {}
 
@@ -150,25 +150,30 @@ end
 ---@param opts cmp_go_deep.Options
 ---@param uri string
 ---@param package_name_cache table<string, string>
----@return string|nil
+---@return string|nil, boolean
 --- TODO: consider asking gopls for the package name, but this is probably faster
 utils.get_package_name = function(opts, uri, package_name_cache)
 	local cached = package_name_cache[uri]
 	if cached then
 		if cached == "" then
-			return nil
+			return nil, true
 		end
-		return cached
+		return cached, true
+	end
+
+	local stat = vim.uv.fs_stat(vim.uri_to_fname(uri))
+	if not (stat and stat.type == "file") then
+		return nil, false
 	end
 
 	if opts.get_package_name_implementation == "treesitter" then
 		local pkg = treesitter_implementations.get_package_name(uri)
 		if pkg then
 			package_name_cache[uri] = pkg
-			return pkg
+			return pkg, true
 		end
 		package_name_cache[uri] = ""
-		return ""
+		return "", true
 	end
 
 	--default to regex
@@ -177,14 +182,14 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 	if not fname then
 		vim.notify("could not get file name from uri: " .. uri, vim.log.levels.WARN)
 		package_name_cache[uri] = ""
-		return nil
+		return nil, true
 	end
 
 	local file, err = io.open(fname, "r")
 	if not file then
 		vim.notify("could not open file: " .. err, vim.log.levels.WARN)
 		package_name_cache[uri] = ""
-		return nil
+		return nil, true
 	end
 
 	local in_block = false
@@ -205,13 +210,13 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 			local pkg = ln:match("^package%s+([%a_][%w_]*)")
 			file:close()
 			package_name_cache[uri] = pkg
-			return pkg
+			return pkg, true
 		end
 	end
 
 	file:close()
 	package_name_cache[uri] = ""
-	return nil
+	return nil, true
 end
 
 ---@param opts cmp_go_deep.Options
@@ -257,32 +262,36 @@ utils.process_items = function(opts, bufnr, cache, callback, project_path, curso
 			and not (opts.exclude_vendored_packages and symbol.location.uri:match("/vendor/"))
 			and symbol.location.uri ~= vim.uri_from_bufnr(bufnr)
 		then
-			local package_name = utils.get_package_name(opts, symbol.location.uri, package_name_cache)
-			if package_name == nil then
+			local package_name, file_exists = utils.get_package_name(opts, symbol.location.uri, package_name_cache)
+			if package_name == nil and file_exists then
 				package_name = symbol.containerName:match("([^/]+)$"):gsub("-", "_")
-				vim.notify(
-					"Package name not found for uri: "
-						.. symbol.location.uri
-						.. "\nDefaulting to directory name: "
-						.. package_name,
-					vim.log.levels.WARN
-				)
+				if opts.debug then
+					vim.notify(
+						"Package name not found for uri: "
+							.. symbol.location.uri
+							.. "\nDefaulting to directory name: "
+							.. package_name,
+						vim.log.levels.WARN
+					)
+				end
 			end
 
-			local package_alias = utils.get_unique_package_alias(used_aliases, package_name)
-			if package_alias ~= package_name then
-				symbol.package_alias = package_alias
-			end
-			symbol.bufnr = bufnr
-			symbol.opts = opts
+			if file_exists and package_name then
+				local package_alias = utils.get_unique_package_alias(used_aliases, package_name)
+				if package_alias ~= package_name then
+					symbol.package_alias = package_alias
+				end
+				symbol.bufnr = bufnr
+				symbol.opts = opts
 
-			table.insert(items, {
-				label = package_alias .. "." .. symbol.name,
-				sortText = symbol.name,
-				kind = kind,
-				detail = '"' .. symbol.containerName .. '"',
-				data = symbol,
-			})
+				table.insert(items, {
+					label = package_alias .. "." .. symbol.name,
+					sortText = symbol.name,
+					kind = kind,
+					detail = '"' .. symbol.containerName .. '"',
+					data = symbol,
+				})
+			end
 		end
 	end
 
