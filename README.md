@@ -1,6 +1,6 @@
 # cmp-go-deep
 
-A GoLang ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) / [blink-cmp](https://github.com/Saghen/blink.cmp), that works alongside [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) / [blink-cmp](https://github.com/Saghen/blink.cmp)'s LSP source and provides completion suggestions for <b> "<i>UNIMPORTED</i> LOCAL, STANDARD LIBRARY, AND VENDORED PACKAGES ONLY".</b> 
+A GoLang ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) / [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) / [blink.cmp](https://github.com/Saghen/blink.cmp)'s LSP source and provides completion suggestions for <b> "<i>UNIMPORTED</i> LOCAL, INTERNAL, AND VENDORED PACKAGES ONLY".</b> 
 
 #### Why?
 
@@ -107,11 +107,12 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and loading data from cache.
 	debounce_cache_requests_ms = 250
 	-- Path to store the SQLite database
+
 	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 
 	-- Maximum size for the SQLite database in bytes.
-	db_size_limit_bytes = 100 * 1024 * 1024, -- 100MB
+	db_size_limit_bytes = 200 * 1024 * 1024, -- 200MB
 }
 ```
 ---
