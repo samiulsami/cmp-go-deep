@@ -41,7 +41,10 @@ source.is_available = function()
 end
 
 source.get_trigger_characters = function()
-	return { "." }
+	return {
+		"^[^a-zA-Z_]",
+		"%.",
+	}
 end
 
 source.complete = function(_, params, callback)
