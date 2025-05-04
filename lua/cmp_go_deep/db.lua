@@ -43,7 +43,7 @@ function DB.setup(opts)
 		vim.notify("[sqlite] failed to create table", vim.log.levels.WARN)
 	end
 
-	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_project_path ON gosymbol_cache(project_path)")
+	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_lookup ON gosymbol_cache(project_path, query_string COLLATE NOCASE)")
 
 	return DB
 end
@@ -52,21 +52,11 @@ end
 ---@param query_string string
 ---@return table|nil
 function DB:load(project_path, query_string)
-	-- local res = self.db:eval(
-	-- 	[[
-	-- 		SELECT json_data FROM gosymbol_cache
-	-- 		WHERE project_path = ?
-	-- 		  AND query_string LIKE ? || '%' COLLATE NOCASE
-	-- 		ORDER BY LENGTH(query_string) ASC
-	-- 		LIMIT 1
-	-- 	]],
-	-- 	{ project_path, query_string }
-	-- )
 	local res = self.db:eval(
 		[[
 			SELECT json_data FROM gosymbol_cache
 			WHERE project_path = ?
-			  AND query_string = ? COLLATE NOCASE
+			  AND query_string LIKE ? || '%' COLLATE NOCASE
 			ORDER BY LENGTH(query_string) ASC
 			LIMIT 1
 		]],
@@ -92,7 +82,7 @@ function DB:prune()
 	local page_count = self.db:eval("PRAGMA page_count")[1]["page_count"]
 	local max_pages = self.db:eval("PRAGMA max_page_count")[1]["max_page_count"]
 
-	if page_count < max_pages then
+	if page_count < math.floor(max_pages * 0.85) then
 		return
 	end
 
