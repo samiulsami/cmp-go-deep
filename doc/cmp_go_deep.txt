@@ -37,9 +37,13 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
         Controls how long to wait for documentation to load.
         Default: `500` (0.5 seconds)
 
-    • `workspace_symbol_timeout_ms`
-	-- maximum time (in milliseconds) to wait for workspace/symbols before defaulting to cached results
-        Default: `1000` (1 second)
+    • `debounce_gopls_requests_ms`
+        Timeout in milliseconds for "locking-in" the current request and sending it to gopls.
+        Default: `100`
+
+    • `debounce_cache_requests_ms`
+        Timeout in milliseconds for "locking-in" the current request and loading data from cache.
+        Default: `250`
 
     • `db_path`
         Path to store the SQLite database.

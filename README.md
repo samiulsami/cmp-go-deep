@@ -10,10 +10,10 @@ At the time of writing, the GoLang Language Server (```gopls@v0.18.1```) doesn't
 #### How?
 
 
-Query  ```gopls's``` ```workspace/symbol``` endpoint, convert the resulting symbols into ```completionItemKinds```, filter the results to only include the ones that are unimported, then finally feed them back into ```nvim-cmp``` / ```blink.cmp```
+Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ```sqlite```, convert the resulting ```SymbolInformation``` into ```completionItemKinds```, filter the results to only include the ones that are unimported, then finally feed them back into ```nvim-cmp``` / ```blink.cmp```
 
 ---
-⚠️ <i> it might take a while for the packages to be indexed in huge codebases </i>
+⚠️ <i> it might take a while for the packages to be indexed by gopls in huge codebases </i>
 #### Demo
 
 * Note: Due to how gopls indexes packages, completions for standard library packages are not available until at least one of them is manually imported.
@@ -23,10 +23,8 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, convert the resulting symb
 
 ---
 ## Requirements
-- [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) 
-
-OR
-- [blink.cmp](https://github.com/saghen/blink.cmp)
+- [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) OR [blink.cmp](https://github.com/saghen/blink.cmp)
+- [sqlite.lua](https://github.com/kkharji/sqlite.lua)
 
 ## Setup
 #### Lazy.nvim
@@ -101,11 +99,13 @@ OR
 
 	-- Timeout in milliseconds for fetching documentation.
 	-- Controls how long to wait for documentation to load.
-	documentation_wait_timeout_ms = 500,
+	documentation_wait_timeout_ms = 100,
 
-	-- maximum time (in milliseconds) to wait for workspace/symbols before defaulting to cached results
-	workspace_symbol_timeout_ms = 1000,
+	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and sending it to gopls.
+	debounce_gopls_requests_ms = 100
 
+	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and loading data from cache.
+	debounce_cache_requests_ms = 250
 	-- Path to store the SQLite database
 	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
