@@ -10,40 +10,46 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
 
     The following options can be configured:
 
-    • `workspace_symbol_timeout_ms`
-        Timeout (in milliseconds) for getting workspace symbols
-        (including unimported packages) from gopls.
-        Warning: Setting this too high can cause a noticeable
-        delay in large codebases.
-        Default: `150`
-
     • `timeout_notifications`
-        Whether to enable timeout notifications on timeouts.
+        Enable/disable timeout notifications.
         Default: `true`
 
-    • `documentation_wait_timeout_ms`
-        Timeout (in milliseconds) for getting documentation.
-        Note: Only used when |cmp_go_deep-get_documentation_implementation|
-        is not `"regex"`.
-        Default: `500`
-
     • `get_documentation_implementation`
-        Strategy for getting documentation: either using
-        LSP `'textDocument/hover'`, or extracting it with regex.
-        Options: `"hover"` | `"regex"`
+        How to get documentation for Go symbols.
+        Options:
+            "hover" - LSP 'textDocument/hover'. Prettier.
+            "regex" - faster and simpler.
         Default: `"hover"`
 
     • `get_package_name_implementation`
-        Strategy for retrieving package names: either using
-        Treesitter or Regex.
-        Options: `"regex"` | `"treesitter"`
-        Known Issue: The `regex` implementation fails if
-        package declarations have inline comments like:
-        `/* hehe */ package xd`.
+        How to get the package names.
+        Options:
+            "treesitter" - accurate but slower.
+            "regex" - faster but can fail in edge cases.
         Default: `"regex"`
 
     • `exclude_vendored_packages`
         Whether to exclude vendored packages from completions.
-        Note: Enabling this has a negligible performance impact.
         Default: `false`
+
+    • `documentation_wait_timeout_ms`
+        Timeout in milliseconds for fetching documentation.
+        Controls how long to wait for documentation to load.
+        Default: `500` (0.5 seconds)
+
+    • `debounce_gopls_requests_ms`
+        Timeout in milliseconds for "locking-in" the current request and sending it to gopls.
+        Default: `100`
+
+    • `debounce_cache_requests_ms`
+        Timeout in milliseconds for "locking-in" the current request and loading data from cache.
+        Default: `250`
+
+    • `db_path`
+        Path to store the SQLite database.
+        Default: `vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3"`
+
+    • `db_size_limit_bytes`
+        Maximum size for the SQLite database in bytes.
+        Default: `100 * 1024 * 1024` (100MB)
 ==============================================================================
