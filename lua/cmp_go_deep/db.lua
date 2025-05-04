@@ -52,11 +52,21 @@ end
 ---@param query_string string
 ---@return table|nil
 function DB:load(project_path, query_string)
+	-- local res = self.db:eval(
+	-- 	[[
+	-- 		SELECT json_data FROM gosymbol_cache
+	-- 		WHERE project_path = ?
+	-- 		  AND query_string LIKE ? || '%' COLLATE NOCASE
+	-- 		ORDER BY LENGTH(query_string) ASC
+	-- 		LIMIT 1
+	-- 	]],
+	-- 	{ project_path, query_string }
+	-- )
 	local res = self.db:eval(
 		[[
 			SELECT json_data FROM gosymbol_cache
 			WHERE project_path = ?
-			  AND query_string LIKE ? || '%' COLLATE NOCASE
+			  AND query_string = ? COLLATE NOCASE
 			ORDER BY LENGTH(query_string) ASC
 			LIMIT 1
 		]],

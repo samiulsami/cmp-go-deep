@@ -12,7 +12,8 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_imported_paths fun(bufnr: integer): table<string, string>
 ---@field add_import_statement fun(bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
----@field process_items fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, gopls_max_item_limit: number): nil
+---@field process_request fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, gopls_max_item_limit: number): nil
+---@field debounced_process_request fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, gopls_max_item_limit: number): nil
 local utils = {}
 
 ---@class cmp_go_deep.utils.request_state
@@ -226,7 +227,7 @@ end
 ---@param project_path string
 ---@param cursor_prefix_word string
 ---@param gopls_max_item_limit number
-utils.process_items = function(opts, bufnr, cache, callback, project_path, cursor_prefix_word, gopls_max_item_limit)
+utils.process_request = function(opts, bufnr, cache, callback, project_path, cursor_prefix_word, gopls_max_item_limit)
 	local items = {}
 	local package_name_cache = {}
 

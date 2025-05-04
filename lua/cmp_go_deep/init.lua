@@ -7,7 +7,8 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil -- how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
 ---@field public exclude_vendored_packages boolean | nil -- whether to exclude vendored packages. default: false
 ---@field public documentation_wait_timeout_ms integer | nil -- maximum time (in milliseconds) to wait for fetching documentation. default: 100
----@field public debounce_ms integer | nil -- time to wait before "locking-in" the current request and sending it to gopls. default: 100.
+---@field public debounce_gopls_requests integer | nil -- time to wait before "locking-in" the current request and sending it to gopls. default: 100.
+---@field public debounce_cache_requests integer | nil -- time to wait before "locking-in" the current request and loading data from cache. default: 250
 ---@field public db_path string | nil -- where to store the sqlite db. default: ~/.local/share/nvim/cmp_go_deep.sqlite3
 ---@field public db_size_limit_bytes number | nil -- max db size in bytes. default: 200MB
 ---@field public debug boolean | nil -- whether to enable debug logging. default: false
@@ -19,7 +20,8 @@ local default_options = {
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 100,
-	debounce_ms = 100,
+	debounce_gopls_requests = 100,
+	debounce_cache_requests = 250,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 	db_size_limit_bytes = 200 * 1024 * 1024,
 	debug = false,
@@ -68,7 +70,11 @@ source.complete = function(_, params, callback)
 
 	if not gopls_requests.debounced_cache_workspace_symbols then
 		gopls_requests.debounced_cache_workspace_symbols =
-			utils.debounce(gopls_requests.cache_workspace_symbols, opts.debounce_ms)
+			utils.debounce(gopls_requests.cache_workspace_symbols, opts.debounce_gopls_requests)
+	end
+
+	if not utils.debounced_process_request then
+		utils.debounced_process_request = utils.debounce(utils.process_request, opts.debounce_cache_requests)
 	end
 
 	local bufnr = vim.api.nvim_get_current_buf()
@@ -84,7 +90,7 @@ source.complete = function(_, params, callback)
 		cursor_prefix_word
 	)
 
-	utils.process_items(
+	utils.debounced_process_request(
 		opts,
 		bufnr,
 		source.cache,
