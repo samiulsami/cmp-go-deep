@@ -2,6 +2,7 @@
 local sqlite = require("sqlite.db")
 
 ---@class cmp_go_deep.DB
+---@field public key_exists fun(self, project_path: string, query_string: string): boolean
 ---@field public load fun(self, project_path: string, query_string: string): table|nil
 ---@field public save fun(self, project_path: string, query_string: string, symbol_information: table): nil
 ---@field private under_size_limit fun(self): boolean
@@ -46,6 +47,22 @@ function DB.setup(opts)
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_lookup ON gosymbol_cache(project_path, query_string COLLATE NOCASE)")
 
 	return DB
+end
+
+---@param project_path string
+---@param query_string string
+---@return boolean
+function DB:key_exists(project_path, query_string)
+	local res = self.db:eval(
+		[[
+		SELECT 1 FROM gosymbol_cache
+		WHERE project_path = ?
+		  AND query_string = ?
+		LIMIT 1
+		]],
+		{ project_path, query_string }
+	)
+	return type(res) == "table" and #res > 0
 end
 
 ---@param project_path string

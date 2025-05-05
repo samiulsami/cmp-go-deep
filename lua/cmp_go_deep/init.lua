@@ -54,18 +54,8 @@ source.complete = function(_, params, callback)
 		return callback({ items = {}, isIncomplete = false })
 	end
 
-	local opts = vim.deepcopy(default_options, false)
-	local extend_non_nil = function(old, new)
-		for k, v in pairs(new) do
-			if v ~= nil then
-				old[k] = v
-			end
-		end
-		return old
-	end
-	opts = extend_non_nil(opts, params.option or {})
 	---@type cmp_go_deep.Options
-	opts = extend_non_nil(opts, params.opts or {})
+	local opts = vim.tbl_deep_extend("force", default_options, params.option or params.opts or {})
 
 	if not source.cache then
 		source.cache = require("cmp_go_deep.db").setup(opts)
@@ -84,24 +74,14 @@ source.complete = function(_, params, callback)
 	local project_path = vim.fn.getcwd()
 	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
 
-	gopls_requests.debounced_cache_workspace_symbols(
-		opts,
-		source.cache,
-		gopls_client,
-		bufnr,
-		project_path,
-		cursor_prefix_word
-	)
-
-	utils.debounced_process_request(
-		opts,
-		bufnr,
-		source.cache,
-		callback,
-		project_path,
-		cursor_prefix_word,
-		gopls_requests.gopls_max_item_limit
-	)
+	-- stylua: ignore
+	gopls_requests.debounced_cache_workspace_symbols(opts, source.cache, gopls_client, bufnr, project_path, cursor_prefix_word)
+	if source.cache:key_exists(project_path, cursor_prefix_word) then
+		-- stylua: ignore
+		utils.process_request(opts, bufnr, source.cache, callback, project_path, cursor_prefix_word, gopls_requests.gopls_max_item_limit)
+	end
+	-- stylua: ignore
+	utils.debounced_process_request(opts, bufnr, source.cache, callback, project_path, cursor_prefix_word, gopls_requests.gopls_max_item_limit)
 end
 
 ---@param completion_item lsp.CompletionItem
