@@ -1,4 +1,4 @@
-local treesitter_implementations = {}
+local treesitter_utils = {}
 
 ---@param bufnr (integer)
 ---@return TSNode | nil
@@ -23,10 +23,34 @@ local function get_root_node(bufnr)
 	return root
 end
 
+---@param bufnr integer
+---@return string
+function treesitter_utils.node_name_at_cursor(bufnr)
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local row, col = cursor[1] - 1, cursor[2]
+
+	local parser = vim.treesitter.get_parser(bufnr, "go")
+	if not parser then
+		return ""
+	end
+
+	local tree = parser:parse()[1]
+	if not tree then
+		return ""
+	end
+
+	local root = tree:root()
+	local node = root and root:descendant_for_range(row, col, row, col)
+	if node == nil then
+		return ""
+	end
+	return node:type()
+end
+
 ---@param bufnr (integer)
 ---@param package_alias string | nil
 ---@param import_path string
-treesitter_implementations.add_import_statement = function(bufnr, package_alias, import_path)
+treesitter_utils.add_import_statement = function(bufnr, package_alias, import_path)
 	local root = get_root_node(bufnr)
 	if root == nil then
 		return
@@ -104,7 +128,7 @@ end
 
 ---@param bufnr (integer)
 ---@return table<string, string> -- key: import path, value: package alias
-treesitter_implementations.get_imported_paths = function(bufnr)
+treesitter_utils.get_imported_paths = function(bufnr)
 	local root = get_root_node(bufnr)
 	if root == nil then
 		return {}
@@ -169,7 +193,7 @@ end
 
 ---@param uri string
 ---@return string|nil
-treesitter_implementations.get_package_name = function(uri)
+treesitter_utils.get_package_name = function(uri)
 	local filepath = vim.uri_to_fname(uri)
 	local bufnr = vim.fn.bufadd(filepath)
 	local root = get_root_node(bufnr)
@@ -190,4 +214,4 @@ treesitter_implementations.get_package_name = function(uri)
 	return nil
 end
 
-return treesitter_implementations
+return treesitter_utils

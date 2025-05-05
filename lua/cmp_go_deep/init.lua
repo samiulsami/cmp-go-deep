@@ -54,6 +54,15 @@ source.complete = function(_, params, callback)
 		return callback({ items = {}, isIncomplete = false })
 	end
 
+	local bufnr = vim.api.nvim_get_current_buf()
+	local node_name = require("cmp_go_deep.treesitter_utils").node_name_at_cursor(bufnr)
+	vim.notify("node_name_at_cursor: " .. node_name, vim.log.levels.WARN)
+	for _, ignore in pairs({ "import", "source" }) do
+		if node_name:match(ignore) then
+			return callback({ items = {}, isIncomplete = false })
+		end
+	end
+
 	---@type cmp_go_deep.Options
 	local opts = vim.tbl_deep_extend("force", default_options, params.option or params.opts or {})
 
@@ -70,7 +79,6 @@ source.complete = function(_, params, callback)
 		utils.debounced_process_request = utils.debounce(utils.process_request, opts.debounce_cache_requests_ms)
 	end
 
-	local bufnr = vim.api.nvim_get_current_buf()
 	local project_path = vim.fn.getcwd()
 	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
 

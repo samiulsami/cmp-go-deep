@@ -1,5 +1,5 @@
 local gopls_requests = require("cmp_go_deep.gopls_requests")
-local treesitter_implementations = require("cmp_go_deep.treesitter_implementations")
+local treesitter_utils = require("cmp_go_deep.treesitter_utils")
 local completionItemKind = vim.lsp.protocol.CompletionItemKind
 
 ---@class cmp_go_deep.utils
@@ -125,14 +125,14 @@ end
 ---@param bufnr (integer)
 ---@return table<string, string>
 utils.get_imported_paths = function(bufnr)
-	return treesitter_implementations.get_imported_paths(bufnr)
+	return treesitter_utils.get_imported_paths(bufnr)
 end
 
 ---@param bufnr (integer)
 ---@param package_alias string | nil
 ---@param import_path string
 utils.add_import_statement = function(bufnr, package_alias, import_path)
-	treesitter_implementations.add_import_statement(bufnr, package_alias, import_path)
+	treesitter_utils.add_import_statement(bufnr, package_alias, import_path)
 end
 
 ---@param used_aliases table<string, boolean>
@@ -168,7 +168,7 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 	end
 
 	if opts.get_package_name_implementation == "treesitter" then
-		local pkg = treesitter_implementations.get_package_name(uri)
+		local pkg = treesitter_utils.get_package_name(uri)
 		if pkg then
 			package_name_cache[uri] = pkg
 			return pkg, true
