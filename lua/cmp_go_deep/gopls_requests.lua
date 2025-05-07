@@ -1,7 +1,7 @@
 ---@class cmp_go_deep.gopls_requests
 ---@field get_documentation fun(opts: cmp_go_deep.Options, gopls_client: vim.lsp.Client | nil, uri: string, range: lsp.Range): string|nil
----@field debounced_cache_workspace_symbols fun(opts: cmp_go_deep.Options, cache: cmp_go_deep.DB, gopls_client: vim.lsp.Client, bufnr: integer, project_path: string, cursor_prefix_word: string): nil
----@field public cache_workspace_symbols fun(opts: cmp_go_deep.Options, cache: cmp_go_deep.DB, gopls_client: vim.lsp.Client, bufnr: integer, project_path: string, cursor_prefix_word: string): nil
+---@field debounced_cache_workspace_symbols fun(opts: cmp_go_deep.Options, cache: cmp_go_deep.DB, gopls_client: vim.lsp.Client, bufnr: integer, project_path: string, cursor_prefix_word: string, utils: cmp_go_deep.utils, callback: any): nil
+---@field public cache_workspace_symbols fun(opts: cmp_go_deep.Options, cache: cmp_go_deep.DB, gopls_client: vim.lsp.Client, bufnr: integer, project_path: string, cursor_prefix_word: string, utils: cmp_go_deep.utils, callback: any): nil
 ---@field public max_item_limit number
 local gopls_requests = {}
 
@@ -55,12 +55,16 @@ end
 ---@param bufnr integer
 ---@param project_path string
 ---@param cursor_prefix_word string
-gopls_requests.cache_workspace_symbols = function(opts, cache, gopls_client, bufnr, project_path, cursor_prefix_word)
+---@param utils cmp_go_deep.utils
+---@param callback any
+-- stylua: ignore
+gopls_requests.cache_workspace_symbols = function(opts, cache, gopls_client, bufnr, project_path, cursor_prefix_word, utils, callback)
 	local success, _ = gopls_client:request("workspace/symbol", { query = cursor_prefix_word }, function(_, result)
 		if not result then
 			return
 		end
 		cache:save(project_path, cursor_prefix_word, result)
+		utils.process_request(opts, bufnr, cache, callback, project_path, cursor_prefix_word, gopls_requests.gopls_max_item_limit)
 	end, bufnr)
 
 	if not success then

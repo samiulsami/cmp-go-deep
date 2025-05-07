@@ -66,22 +66,18 @@ source.complete = function(_, params, callback)
 			utils.debounce(gopls_requests.cache_workspace_symbols, opts.debounce_gopls_requests_ms)
 	end
 
-	if not utils.debounced_process_request then
-		utils.debounced_process_request = utils.debounce(utils.process_request, opts.debounce_cache_requests_ms)
+	if not utils.debounced_process_query then
+		utils.debounced_process_query = utils.debounce(utils.process_request, opts.debounce_cache_requests_ms)
 	end
 
 	local bufnr = vim.api.nvim_get_current_buf()
 	local project_path = vim.fn.getcwd()
 	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
 
-	-- stylua: ignore
-	gopls_requests.debounced_cache_workspace_symbols(opts, source.cache, gopls_client, bufnr, project_path, cursor_prefix_word)
-	if source.cache:key_exists(project_path, cursor_prefix_word) then
-		-- stylua: ignore
-		utils.process_request(opts, bufnr, source.cache, callback, project_path, cursor_prefix_word, gopls_requests.gopls_max_item_limit)
-	end
-	-- stylua: ignore
-	utils.debounced_process_request(opts, bufnr, source.cache, callback, project_path, cursor_prefix_word, gopls_requests.gopls_max_item_limit)
+	-- stylua: ignore 
+	utils.debounced_process_query(opts, bufnr, source.cache, callback, project_path, cursor_prefix_word, gopls_requests.gopls_max_item_limit)
+	-- stylua: ignore 
+	gopls_requests.debounced_cache_workspace_symbols(opts, source.cache, gopls_client, bufnr, project_path, cursor_prefix_word, utils, callback)
 end
 
 ---@param completion_item lsp.CompletionItem
