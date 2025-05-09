@@ -1,12 +1,8 @@
 ---@class cmp_go_deep.gopls_requests
 ---@field get_documentation fun(opts: cmp_go_deep.Options, gopls_client: vim.lsp.Client | nil, uri: string, range: lsp.Range): string|nil
----@field debounced_cache_workspace_symbols fun(opts: cmp_go_deep.Options, cache: cmp_go_deep.DB, gopls_client: vim.lsp.Client, bufnr: integer, project_path: string, cursor_prefix_word: string, utils: cmp_go_deep.utils, callback: any): nil
----@field public cache_workspace_symbols fun(opts: cmp_go_deep.Options, cache: cmp_go_deep.DB, gopls_client: vim.lsp.Client, bufnr: integer, project_path: string, cursor_prefix_word: string, utils: cmp_go_deep.utils, callback: any): nil
----@field public max_item_limit number
+---@field debounced_workspace_symbols fun(gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
+---@field public workspace_symbols fun(gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
 local gopls_requests = {}
-
---Max workspace symbols that gopls returns in one query https://github.com/golang/tools/blob/de18b0bf1345e2dda43ba4fa57605b4ccbbe67ab/gopls/internal/golang/workspace_symbol.go#L29-L29
-gopls_requests.gopls_max_item_limit = 100
 
 ---@param opts cmp_go_deep.Options
 ---@param gopls_client vim.lsp.Client | nil
@@ -49,22 +45,17 @@ gopls_requests.get_documentation = function(opts, gopls_client, uri, range)
 	return markdown
 end
 
----@param opts cmp_go_deep.Options
----@param cache cmp_go_deep.DB
 ---@param gopls_client vim.lsp.Client
 ---@param bufnr integer
----@param project_path string
 ---@param cursor_prefix_word string
----@param utils cmp_go_deep.utils
----@param callback any
+---@param callback fun(items: lsp.SymbolInformation[]): nil
 -- stylua: ignore
-gopls_requests.cache_workspace_symbols = function(opts, cache, gopls_client, bufnr, project_path, cursor_prefix_word, utils, callback)
+gopls_requests.workspace_symbols = function(gopls_client, bufnr, cursor_prefix_word, callback)
 	local success, _ = gopls_client:request("workspace/symbol", { query = cursor_prefix_word }, function(_, result)
 		if not result then
 			return
 		end
-		cache:save(project_path, cursor_prefix_word, result)
-		utils.process_request(opts, bufnr, cache, callback, project_path, cursor_prefix_word, gopls_requests.gopls_max_item_limit)
+		callback(result)
 	end, bufnr)
 
 	if not success then

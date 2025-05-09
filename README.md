@@ -1,10 +1,10 @@
 # cmp-go-deep
 
-A GoLang ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) / [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) / [blink.cmp](https://github.com/Saghen/blink.cmp)'s LSP source and provides completion suggestions for <b> "<i>UNIMPORTED</i> LOCAL, INTERNAL, AND VENDORED PACKAGES ONLY".</b> 
+A GoLang ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) / [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) / [blink.cmp](https://github.com/Saghen/blink.cmp)'s LSP source and provides completion suggestions for <b> "<i>UNIMPORTED</i> LOCAL, INTERNAL, AND VENDORED PACKAGES ONLY".</b>
 
 #### Why?
 
-At the time of writing, the GoLang Language Server (```gopls@v0.18.1```) doesn't seem to support deep completions for unimported pacakges. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
+At the time of writing, the GoLang Language Server (```gopls@v0.18.1```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
 
 
 #### How?
@@ -102,10 +102,10 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	documentation_wait_timeout_ms = 100,
 
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and sending it to gopls.
-	debounce_gopls_requests_ms = 100
+	debounce_gopls_requests_ms = 350
 
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and loading data from cache.
-	debounce_cache_requests_ms = 250
+	debounce_cache_requests_ms = 50
 	-- Path to store the SQLite database
 
 	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"
@@ -118,6 +118,6 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 ---
 #### TODO
 - [x] Cache results for faster completions.
-- [ ] Cross-project cache sharing for internal packages
-- [ ] Better memory usage
+- [x] Cross-project cache sharing for internal packages
+- [x] Better memory usage
 - [ ] Remove the indirect dependency on ```cmp-nvim-lsp``` or ```blink.cmp's``` LSP source.
