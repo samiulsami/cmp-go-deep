@@ -20,8 +20,8 @@ local default_options = {
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 100,
-	debounce_gopls_requests_ms = 100,
-	debounce_cache_requests_ms = 250,
+	debounce_gopls_requests_ms = 350,
+	debounce_cache_requests_ms = 50,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 	db_size_limit_bytes = 200 * 1024 * 1024,
 	debug = false,
@@ -61,23 +61,50 @@ source.complete = function(_, params, callback)
 		source.cache = require("cmp_go_deep.db").setup(opts)
 	end
 
-	if not gopls_requests.debounced_cache_workspace_symbols then
-		gopls_requests.debounced_cache_workspace_symbols =
-			utils.debounce(gopls_requests.cache_workspace_symbols, opts.debounce_gopls_requests_ms)
+	if not gopls_requests.debounced_workspace_symbols then
+		gopls_requests.debounced_workspace_symbols =
+			utils.debounce(gopls_requests.workspace_symbols, opts.debounce_gopls_requests_ms)
 	end
 
 	if not utils.debounced_process_query then
-		utils.debounced_process_query = utils.debounce(utils.process_request, opts.debounce_cache_requests_ms)
+		utils.debounced_process_query = utils.debounce(utils.process_query, opts.debounce_cache_requests_ms)
 	end
 
 	local bufnr = vim.api.nvim_get_current_buf()
 	local project_path = vim.fn.getcwd()
 	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
+	local vendor_prefix = "file://" .. project_path .. "/vendor/"
 
-	-- stylua: ignore 
-	utils.debounced_process_query(opts, bufnr, source.cache, callback, project_path, cursor_prefix_word, gopls_requests.gopls_max_item_limit)
-	-- stylua: ignore 
-	gopls_requests.debounced_cache_workspace_symbols(opts, source.cache, gopls_client, bufnr, project_path, cursor_prefix_word, utils, callback)
+	utils.debounced_process_query(opts, bufnr, source.cache, callback, project_path, cursor_prefix_word, vendor_prefix)
+
+	gopls_requests.debounced_workspace_symbols(gopls_client, bufnr, cursor_prefix_word, function(result)
+		if result then
+			local filtered_result = {}
+			for _, symbol in ipairs(result) do
+				if
+					utils.symbol_to_completion_kind(symbol.kind)
+					and symbol.name:match("^[A-Z]")
+					and not symbol.location.uri:match("_test%.go$")
+				then
+					symbol.vendored = string.sub(symbol.location.uri, 1, #vendor_prefix) == vendor_prefix
+					if symbol.vendored then
+						symbol.location.uri = symbol.location.uri:sub(#vendor_prefix + 1)
+					end
+					table.insert(filtered_result, symbol)
+				end
+			end
+			source.cache:save(project_path, filtered_result)
+		end
+		utils.debounced_process_query(
+			opts,
+			bufnr,
+			source.cache,
+			callback,
+			project_path,
+			cursor_prefix_word,
+			vendor_prefix
+		)
+	end)
 end
 
 ---@param completion_item lsp.CompletionItem

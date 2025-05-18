@@ -3,7 +3,7 @@ local treesitter_implementations = require("cmp_go_deep.treesitter_implementatio
 local completionItemKind = vim.lsp.protocol.CompletionItemKind
 
 ---@class cmp_go_deep.utils
----@field debounce fun(fn: fun(...), delay_ms: integer): fun(request_state: cmp_go_deep.utils.request_state, ...)
+---@field debounce fun(fn: fun(...), delay_ms: integer): fun(...)
 ---@field symbol_to_completion_kind fun(lspKind: lsp.SymbolKind): integer
 ---@field get_cursor_prefix_word fun(win_id: integer): string
 ---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, package_alias: string): string
@@ -12,12 +12,9 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_imported_paths fun(bufnr: integer): table<string, string>
 ---@field add_import_statement fun(bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
----@field process_request fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, gopls_max_item_limit: number): nil
----@field debounced_process_query fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, gopls_max_item_limit: number): nil
+---@field process_query fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, vendor_prefix: string): nil): nil
+---@field debounced_process_query fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, vendor_prefix: string): nil
 local utils = {}
-
----@class cmp_go_deep.utils.request_state
----@field cancelled boolean
 
 local symbol_to_completion_kind = {
 	[10] = completionItemKind.Enum,
@@ -226,20 +223,8 @@ end
 ---@param callback any
 ---@param project_path string
 ---@param cursor_prefix_word string
----@param gopls_max_item_limit number
-utils.process_request = function(opts, bufnr, cache, callback, project_path, cursor_prefix_word, gopls_max_item_limit)
-	local items = {}
-	local package_name_cache = {}
-
-	local is_incomplete = false
-	local imported_paths = utils.get_imported_paths(bufnr)
-
-	---@type table<string, boolean>
-	local used_aliases = {}
-	for _, v in pairs(imported_paths) do
-		used_aliases[v] = true
-	end
-
+---@param vendor_prefix string
+utils.process_query = function(opts, bufnr, cache, callback, project_path, cursor_prefix_word, vendor_prefix)
 	---@type table?
 	local result = {}
 	local current_prefix = cursor_prefix_word
@@ -252,17 +237,29 @@ utils.process_request = function(opts, bufnr, cache, callback, project_path, cur
 		return callback({ items = {}, isIncomplete = true })
 	end
 
+	local items = {}
+	local package_name_cache = {}
+	local imported_paths = utils.get_imported_paths(bufnr)
+
+	---@type table<string, boolean>
+	local used_aliases = {}
+	for _, v in pairs(imported_paths) do
+		used_aliases[v] = true
+	end
+
 	---TODO: better type checking and error handling
 	for _, symbol in ipairs(result) do
 		local kind = utils.symbol_to_completion_kind(symbol.kind)
 		if
 			kind
-			and symbol.name:match("^[A-Z]")
 			and not imported_paths[symbol.containerName]
-			and not symbol.location.uri:match("_test%.go$")
-			and not (opts.exclude_vendored_packages and symbol.location.uri:match("/vendor/"))
 			and symbol.location.uri ~= vim.uri_from_bufnr(bufnr)
+			and not (opts.exclude_vendored_packages and symbol.vendored)
 		then
+			if symbol.vendored then
+				symbol.location.uri = vendor_prefix .. symbol.location.uri
+			end
+
 			local package_name, file_exists = utils.get_package_name(opts, symbol.location.uri, package_name_cache)
 			if package_name == nil and file_exists then
 				package_name = symbol.containerName:match("([^/]+)$"):gsub("-", "_")
@@ -296,8 +293,7 @@ utils.process_request = function(opts, bufnr, cache, callback, project_path, cur
 		end
 	end
 
-	is_incomplete = #result >= gopls_max_item_limit
-	return callback({ items = items, isIncomplete = is_incomplete })
+	return callback({ items = items, isIncomplete = true })
 end
 
 return utils

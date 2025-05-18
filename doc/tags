@@ -1,3 +1,5 @@
 cmp_go_deep-default-options	cmp_go_deep.txt	/*cmp_go_deep-default-options*
 cmp_go_deep-description	cmp_go_deep.txt	/*cmp_go_deep-description*
 cmp_go_deep-options	cmp_go_deep.txt	/*cmp_go_deep-options*
+cmp_go_deep-setup-blink	cmp_go_deep.txt	/*cmp_go_deep-setup-blink*
+cmp_go_deep-setup-nvim-cmp	cmp_go_deep.txt	/*cmp_go_deep-setup-nvim-cmp*

@@ -6,6 +6,58 @@ DESCRIPTION                                                    *cmp_go_deep-desc
     |cmp_go_deep| Go source that provides deep symbol
     completions for unimported packages.
 
+=============================================================================
+SETUP-nvim-cmp                                                 *cmp_go_deep-setup-nvim-cmp*
+>lua
+{
+    "hrsh7th/nvim-cmp",
+    dependencies = {
+	{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
+    },
+    require("cmp").setup({
+        sources = {{
+            name = "go_deep",
+            ---@module "cmp_go_deep"
+            ---@type cmp_go_deep.Options
+            option = {
+                -- See below for configuration options
+            },
+        }},
+    })
+}
+<
+
+==============================================================================
+SETUP-blink.cmp                                               *cmp_go_deep-setup-blink*
+>lua
+{
+	"saghen/blink.cmp",
+	dependencies = {
+		{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
+		{ "saghen/blink.compat" },
+	},
+	opts = {
+		sources = {
+			default = {
+				"go_deep",
+			},
+			providers = {
+				go_deep = {
+					name = "go_deep",
+					module = "blink.compat.source",
+					---@module "cmp_go_deep"
+					---@type cmp_go_deep.Options
+					opts = {
+						-- See below for configuration options
+					},
+				},
+			},
+		},
+	},
+}
+<
+
+==============================================================================
 DEFAULT OPTIONS                                                *cmp_go_deep-default-options*
 
     The following options can be configured:
@@ -35,15 +87,15 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
     • `documentation_wait_timeout_ms`
         Timeout in milliseconds for fetching documentation.
         Controls how long to wait for documentation to load.
-        Default: `500` (0.5 seconds)
+        Default: `100` (0.5 seconds)
 
     • `debounce_gopls_requests_ms`
         Timeout in milliseconds for "locking-in" the current request and sending it to gopls.
-        Default: `100`
+        Default: `350`
 
     • `debounce_cache_requests_ms`
         Timeout in milliseconds for "locking-in" the current request and loading data from cache.
-        Default: `250`
+        Default: `50`
 
     • `db_path`
         Path to store the SQLite database.
@@ -53,3 +105,5 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
         Maximum size for the SQLite database in bytes.
         Default: `200 * 1024 * 1024` (200MB)
 ==============================================================================
+
+vim:tw=80:ts=4:ft=help:norl:
