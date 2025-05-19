@@ -4,7 +4,7 @@ local sqlite = require("sqlite.db")
 
 ---@class cmp_go_deep.DB
 ---@field public load fun(self, project_path: string, query_string: string): table
----@field public save fun(self, project_path: string, symbol_information: table): nil
+---@field public save fun(self, utils: cmp_go_deep.utils, project_path: string, symbol_information: table): nil
 ---@field private db sqlite_db
 ---@field private db_path string
 ---@field private max_db_size_bytes number
@@ -97,19 +97,13 @@ function DB:load(project_path, query_string)
 	return ret
 end
 
----@param symbol lsp.SymbolInformation
----@return string
-local function deterministic_symbol_hash(symbol)
-	local ordered = symbol.name .. " #" .. symbol.kind .. " #" .. symbol.location.uri .. " #" .. symbol.containerName
-	return vim.fn.sha256(ordered)
-end
-
+---@param utils cmp_go_deep.utils
 ---@param project_path string
 ---@param symbol_information table
 --TODO: rtfm and optimize memory usage
 --TODO: add configurations for manipulating fuzzy search behavior
 --TODO: implement custom fuzzy search logic
-function DB:save(project_path, symbol_information)
+function DB:save(utils, project_path, symbol_information)
 	-- Prepare the statement to insert into gosymbols table
 	local insert_gosymbols = sqlstmt:parse(
 		self.db.conn,
@@ -129,7 +123,7 @@ function DB:save(project_path, symbol_information)
 	self.db:eval("BEGIN TRANSACTION;")
 	for _, symbol in ipairs(symbol_information) do
 		local encoded = vim.json.encode(symbol)
-		local hash = deterministic_symbol_hash(symbol)
+		local hash = utils.deterministic_symbol_hash(symbol)
 
 		insert_gosymbols:bind({ symbol.name, encoded, hash })
 		insert_gosymbols:step()

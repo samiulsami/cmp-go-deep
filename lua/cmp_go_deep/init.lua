@@ -7,8 +7,8 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil -- how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
 ---@field public exclude_vendored_packages boolean | nil -- whether to exclude vendored packages. default: false
 ---@field public documentation_wait_timeout_ms integer | nil -- maximum time (in milliseconds) to wait for fetching documentation. default: 100
----@field public debounce_gopls_requests_ms integer | nil -- time to wait before "locking-in" the current request and sending it to gopls. default: 100.
----@field public debounce_cache_requests_ms integer | nil -- time to wait before "locking-in" the current request and loading data from cache. default: 250
+---@field public debounce_gopls_requests_ms integer | nil -- time to wait before "locking-in" the current request and sending it to gopls. default: 350
+---@field public debounce_cache_requests_ms integer | nil -- time to wait before "locking-in" the current request and loading data from cache. default: 50
 ---@field public db_path string | nil -- where to store the sqlite db. default: ~/.local/share/nvim/cmp_go_deep.sqlite3
 ---@field public db_size_limit_bytes number | nil -- max db size in bytes. default: 200MB
 ---@field public debug boolean | nil -- whether to enable debug logging. default: false
@@ -70,12 +70,24 @@ source.complete = function(_, params, callback)
 		utils.debounced_process_query = utils.debounce(utils.process_query, opts.debounce_cache_requests_ms)
 	end
 
+	---@type table<string, boolean>
+	local processed_items = {}
+
 	local bufnr = vim.api.nvim_get_current_buf()
 	local project_path = vim.fn.getcwd()
 	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
-	local vendor_prefix = "file://" .. project_path .. "/vendor/"
+	local vendor_path_prefix = "file://" .. project_path .. "/vendor/"
 
-	utils.debounced_process_query(opts, bufnr, source.cache, callback, project_path, cursor_prefix_word, vendor_prefix)
+	utils:debounced_process_query(
+		opts,
+		bufnr,
+		source.cache,
+		callback,
+		project_path,
+		cursor_prefix_word,
+		vendor_path_prefix,
+		processed_items
+	)
 
 	gopls_requests.debounced_workspace_symbols(gopls_client, bufnr, cursor_prefix_word, function(result)
 		if result then
@@ -86,23 +98,24 @@ source.complete = function(_, params, callback)
 					and symbol.name:match("^[A-Z]")
 					and not symbol.location.uri:match("_test%.go$")
 				then
-					symbol.vendored = string.sub(symbol.location.uri, 1, #vendor_prefix) == vendor_prefix
+					symbol.vendored = string.sub(symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix
 					if symbol.vendored then
-						symbol.location.uri = symbol.location.uri:sub(#vendor_prefix + 1)
+						symbol.location.uri = symbol.location.uri:sub(#vendor_path_prefix + 1)
 					end
 					table.insert(filtered_result, symbol)
 				end
 			end
-			source.cache:save(project_path, filtered_result)
+			source.cache:save(utils, project_path, filtered_result)
 		end
-		utils.debounced_process_query(
+		utils:debounced_process_query(
 			opts,
 			bufnr,
 			source.cache,
 			callback,
 			project_path,
 			cursor_prefix_word,
-			vendor_prefix
+			vendor_path_prefix,
+			processed_items
 		)
 	end)
 end

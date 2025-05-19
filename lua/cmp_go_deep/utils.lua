@@ -12,8 +12,9 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_imported_paths fun(bufnr: integer): table<string, string>
 ---@field add_import_statement fun(bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
----@field process_query fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, vendor_prefix: string): nil): nil
----@field debounced_process_query fun(opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, vendor_prefix: string): nil
+---@field deterministic_symbol_hash fun(symbol: lsp.SymbolInformation): string
+---@field process_query fun(self, opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, vendor_prefix: string, processed_items: table<string, boolean>): nil
+---@field debounced_process_query fun(self, opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, vendor_prefix: string, processed_items: table<string, boolean>): nil
 local utils = {}
 
 local symbol_to_completion_kind = {
@@ -217,14 +218,31 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 	return nil, true
 end
 
+---@param symbol lsp.SymbolInformation
+---@return string
+utils.deterministic_symbol_hash = function(symbol)
+	local ordered = symbol.name .. " #" .. symbol.kind .. " #" .. symbol.location.uri .. " #" .. symbol.containerName
+	return vim.fn.sha256(ordered)
+end
+
 ---@param opts cmp_go_deep.Options
 ---@param bufnr integer
 ---@param cache cmp_go_deep.DB
 ---@param callback any
 ---@param project_path string
 ---@param cursor_prefix_word string
----@param vendor_prefix string
-utils.process_query = function(opts, bufnr, cache, callback, project_path, cursor_prefix_word, vendor_prefix)
+---@param vendor_path_prefix string
+---@param processed_items table<string, boolean>
+function utils:process_query(
+	opts,
+	bufnr,
+	cache,
+	callback,
+	project_path,
+	cursor_prefix_word,
+	vendor_path_prefix,
+	processed_items
+)
 	---@type table?
 	local result = {}
 	local current_prefix = cursor_prefix_word
@@ -256,8 +274,14 @@ utils.process_query = function(opts, bufnr, cache, callback, project_path, curso
 			and symbol.location.uri ~= vim.uri_from_bufnr(bufnr)
 			and not (opts.exclude_vendored_packages and symbol.vendored)
 		then
+			local hash = self.deterministic_symbol_hash(symbol)
+			if processed_items[hash] then
+				goto continue
+			end
+			processed_items[hash] = true
+
 			if symbol.vendored then
-				symbol.location.uri = vendor_prefix .. symbol.location.uri
+				symbol.location.uri = vendor_path_prefix .. symbol.location.uri
 			end
 
 			local package_name, file_exists = utils.get_package_name(opts, symbol.location.uri, package_name_cache)
@@ -291,6 +315,7 @@ utils.process_query = function(opts, bufnr, cache, callback, project_path, curso
 				})
 			end
 		end
+		::continue::
 	end
 
 	return callback({ items = items, isIncomplete = true })
