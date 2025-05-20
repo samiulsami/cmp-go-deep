@@ -41,16 +41,17 @@ source.is_available = function()
 end
 
 source.get_trigger_characters = function()
-	return {
-		"^[^a-zA-Z_]",
-		"%.",
-	}
+	return { "[%w_]" }
 end
 
 source.complete = function(_, params, callback)
 	local gopls_client = utils.get_gopls_client()
 	if not gopls_client then
-		vim.notify("gopls client is nil", vim.log.levels.WARN)
+		return callback({ items = {}, isIncomplete = false })
+	end
+
+	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
+	if cursor_prefix_word:match("[%.]") or cursor_prefix_word:match("[^%w_]") then
 		return callback({ items = {}, isIncomplete = false })
 	end
 
@@ -75,7 +76,6 @@ source.complete = function(_, params, callback)
 
 	local bufnr = vim.api.nvim_get_current_buf()
 	local project_path = vim.fn.getcwd()
-	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
 	local vendor_path_prefix = "file://" .. project_path .. "/vendor/"
 
 	utils:debounced_process_query(
