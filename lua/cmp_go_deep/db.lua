@@ -40,12 +40,8 @@ function DB.setup(opts)
 	        ]],
 
 		[[
-		    CREATE TABLE IF NOT EXISTS project_symbol_lookup (
-		      project_name TEXT,
-		      hash TEXT,
-		      PRIMARY KEY (project_name, hash)
-		      FOREIGN KEY (hash) REFERENCES gosymbols(hash) ON DELETE CASCADE
-		    );
+		    CREATE VIRTUAL TABLE IF NOT EXISTS gosymbols_fts
+		    USING fts5(name, project_path, hash UNINDEXED);
 		]],
 	}
 
@@ -56,17 +52,6 @@ function DB.setup(opts)
 		end
 	end
 
-	local indexes = {
-		"CREATE INDEX IF NOT EXISTS idx_project_name ON project_symbol_lookup(project_name);",
-		"CREATE INDEX IF NOT EXISTS idx_gosymbols_name ON gosymbols(name);",
-	}
-	for _, idx in ipairs(indexes) do
-		local ok = DB.db:eval(idx)
-		if not ok then
-			vim.notify("[sqlite] failed to create index", vim.log.levels.WARN)
-		end
-	end
-
 	return DB
 end
 
@@ -74,16 +59,15 @@ end
 ---@param query_string string
 ---@return table
 function DB:load(project_path, query_string)
-	local res = self.db:eval(
-		[[
-			SELECT data FROM gosymbols
-			JOIN project_symbol_lookup ON gosymbols.hash = project_symbol_lookup.hash
-			WHERE project_symbol_lookup.project_name = ?
-			AND gosymbols.name LIKE '%' || ? || '%'
-			ORDER BY LENGTH(gosymbols.name) ASC
-			LIMIT 100
-		]],
-		{ project_path, query_string }
+	res = self.db:eval(
+		"SELECT gosymbols.data FROM gosymbols WHERE gosymbols.hash IN "
+			.. "(SELECT hash FROM gosymbols_fts WHERE gosymbols_fts MATCH '"
+			.. 'project_path:"'
+			.. project_path
+			.. '" AND name:'
+			.. query_string
+			.. "*'"
+			.. " LIMIT 100)"
 	)
 
 	if type(res) ~= "table" or #res == 0 then
@@ -112,11 +96,11 @@ function DB:save(utils, project_path, symbol_information)
 		    VALUES (?, ?, ?);
 		]]
 	)
-	local insert_lookup = sqlstmt:parse(
+	local insert_gosymbols_fts = sqlstmt:parse(
 		self.db.conn,
 		[[
-		    INSERT OR REPLACE INTO project_symbol_lookup (project_name, hash)
-		    VALUES (?, ?);
+		    INSERT OR REPLACE INTO gosymbols_fts (name, project_path, hash)
+		    VALUES (?, ?, ?);
 		]]
 	)
 
@@ -129,14 +113,14 @@ function DB:save(utils, project_path, symbol_information)
 		insert_gosymbols:step()
 		insert_gosymbols:reset()
 
-		insert_lookup:bind({ project_path, hash })
-		insert_lookup:step()
-		insert_lookup:reset()
+		insert_gosymbols_fts:bind({ symbol.name, project_path, hash })
+		insert_gosymbols_fts:step()
+		insert_gosymbols_fts:reset()
 	end
 	self.db:eval("END TRANSACTION;")
 
 	insert_gosymbols:finalize()
-	insert_lookup:finalize()
+	insert_gosymbols_fts:finalize()
 end
 
 return DB
