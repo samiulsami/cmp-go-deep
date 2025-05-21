@@ -265,25 +265,30 @@ function utils:process_query(
 		used_aliases[v] = true
 	end
 
+	local current_buf_uri = vim.uri_from_bufnr(bufnr)
+	local current_buf_dir = vim.fn.fnamemodify(current_buf_uri, ":h")
+
 	---TODO: better type checking and error handling
 	for _, symbol in ipairs(result) do
 		local kind = utils.symbol_to_completion_kind(symbol.kind)
+		local hash = self.deterministic_symbol_hash(symbol)
+		if processed_items[hash] then
+			goto continue
+		end
+		processed_items[hash] = true
+
+		if symbol.vendored then
+			symbol.location.uri = vendor_path_prefix .. symbol.location.uri
+		end
+		local symbol_dir = vim.fn.fnamemodify(symbol.location.uri, ":h")
+
 		if
 			kind
 			and not imported_paths[symbol.containerName]
-			and symbol.location.uri ~= vim.uri_from_bufnr(bufnr)
+			and symbol.location.uri ~= current_buf_uri
+			and symbol_dir ~= current_buf_dir
 			and not (opts.exclude_vendored_packages and symbol.vendored)
 		then
-			local hash = self.deterministic_symbol_hash(symbol)
-			if processed_items[hash] then
-				goto continue
-			end
-			processed_items[hash] = true
-
-			if symbol.vendored then
-				symbol.location.uri = vendor_path_prefix .. symbol.location.uri
-			end
-
 			local package_name, file_exists = utils.get_package_name(opts, symbol.location.uri, package_name_cache)
 			if package_name == nil and file_exists then
 				package_name = symbol.containerName:match("([^/]+)$"):gsub("-", "_")
