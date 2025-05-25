@@ -59,7 +59,7 @@ end
 ---@param query_string string
 ---@return table
 function DB:load(project_path, query_string)
-	res = self.db:eval(
+	local res = self.db:eval(
 		"SELECT gosymbols.data FROM gosymbols WHERE gosymbols.hash IN "
 			.. "(SELECT hash FROM gosymbols_fts WHERE gosymbols_fts MATCH '"
 			.. 'project_path:"'
