@@ -23,10 +23,11 @@ local function get_root_node(bufnr)
 	return root
 end
 
+---@param opts cmp_go_deep.Options
 ---@param bufnr (integer)
 ---@param package_alias string | nil
 ---@param import_path string
-treesitter_implementations.add_import_statement = function(bufnr, package_alias, import_path)
+treesitter_implementations.add_import_statement = function(opts, bufnr, package_alias, import_path)
 	local root = get_root_node(bufnr)
 	if root == nil then
 		return
@@ -52,7 +53,9 @@ treesitter_implementations.add_import_statement = function(bufnr, package_alias,
 		if import_node:named_child_count() == 1 then
 			local child = import_node:named_child(0)
 			if not child then
-				vim.notify("could not parse import line with treesitter", vim.log.levels.WARN)
+				if opts.notifications then
+					vim.notify("could not parse import line with treesitter", vim.log.levels.WARN)
+				end
 				return
 			end
 
@@ -70,7 +73,9 @@ treesitter_implementations.add_import_statement = function(bufnr, package_alias,
 
 		local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row + 1, false)
 		if not lines[#lines]:match("^%s*%)") then
-			vim.notify("could not parse import block with treesitter", vim.log.levels.WARN)
+			if opts.notifications then
+				vim.notify("could not parse import block with treesitter", vim.log.levels.WARN)
+			end
 			return
 		end
 
@@ -102,9 +107,10 @@ local function trim_quotes(str)
 	return str:gsub('^["`]+', ""):gsub('["`]+$', "")
 end
 
+---@param opts cmp_go_deep.Options
 ---@param bufnr (integer)
 ---@return table<string, string> -- key: import path, value: package alias
-treesitter_implementations.get_imported_paths = function(bufnr)
+treesitter_implementations.get_imported_paths = function(opts, bufnr)
 	local root = get_root_node(bufnr)
 	if root == nil then
 		return {}
@@ -134,7 +140,7 @@ treesitter_implementations.get_imported_paths = function(bufnr)
 				text = trim_quotes(text)
 				local package_alias = name_node and vim.treesitter.get_node_text(name_node, bufnr)
 				package_alias = package_alias or text:match("([^/]+)$")
-				if package_alias == nil then
+				if package_alias == nil and opts.notifications then
 					vim.notify("could not parse import line with treesitter " .. text, vim.log.levels.WARN)
 				end
 				imported_paths[text] = package_alias

@@ -9,12 +9,12 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, package_alias: string): string
 ---@field get_gopls_client fun(): vim.lsp.Client|nil
 ---@field get_documentation fun(opts: cmp_go_deep.Options, uri: string, range: lsp.Range): string|nil
----@field get_imported_paths fun(bufnr: integer): table<string, string>
----@field add_import_statement fun(bufnr: integer, package_name: string | nil, import_path: string): nil
+---@field get_imported_paths fun(opts: cmp_go_deep.Options, bufnr: integer): table<string, string>bufnr: integer): table<string, string>
+---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
 ---@field deterministic_symbol_hash fun(symbol: lsp.SymbolInformation): string
----@field process_query fun(self, opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, vendor_prefix: string, processed_items: table<string, boolean>): nil
----@field debounced_process_query fun(self, opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, project_path: string, cursor_prefix_word: string, vendor_prefix: string, processed_items: table<string, boolean>): nil
+---@field process_query fun(self, opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, cursor_prefix_word: string, vendor_prefix: string, project_path_prefix: string, processed_items: table<string, boolean>): nil
+---@field debounced_process_query fun(self, opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, cursor_prefix_word: string, vendor_prefix: string, project_path_prefix: string, processed_items: table<string, boolean>): nil
 local utils = {}
 
 local symbol_to_completion_kind = {
@@ -120,17 +120,19 @@ utils.get_documentation = function(opts, uri, range)
 	return string.format("```%s\n%s\n```", ft, table.concat(doc_lines, "\n"))
 end
 
+---@param opts cmp_go_deep.Options
 ---@param bufnr (integer)
 ---@return table<string, string>
-utils.get_imported_paths = function(bufnr)
-	return treesitter_implementations.get_imported_paths(bufnr)
+utils.get_imported_paths = function(opts, bufnr)
+	return treesitter_implementations.get_imported_paths(opts, bufnr)
 end
 
+---@param opts cmp_go_deep.Options
 ---@param bufnr (integer)
 ---@param package_alias string | nil
 ---@param import_path string
-utils.add_import_statement = function(bufnr, package_alias, import_path)
-	treesitter_implementations.add_import_statement(bufnr, package_alias, import_path)
+utils.add_import_statement = function(opts, bufnr, package_alias, import_path)
+	treesitter_implementations.add_import_statement(opts, bufnr, package_alias, import_path)
 end
 
 ---@param used_aliases table<string, boolean>
@@ -179,14 +181,18 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 	--- FIXME: regex implementation doesn't work for package declarations like: "/* hehe */ package xd"
 	local fname = vim.uri_to_fname(uri)
 	if not fname then
-		vim.notify("could not get file name from uri: " .. uri, vim.log.levels.WARN)
+		if opts.notifications then
+			vim.notify("could not get file name from uri: " .. uri, vim.log.levels.WARN)
+		end
 		package_name_cache[uri] = ""
 		return nil, true
 	end
 
 	local file, err = io.open(fname, "r")
 	if not file then
-		vim.notify("could not open file: " .. err, vim.log.levels.WARN)
+		if opts.notifications then
+			vim.notify("could not open file: " .. err, vim.log.levels.WARN)
+		end
 		package_name_cache[uri] = ""
 		return nil, true
 	end
@@ -229,35 +235,29 @@ end
 ---@param bufnr integer
 ---@param cache cmp_go_deep.DB
 ---@param callback any
----@param project_path string
 ---@param cursor_prefix_word string
 ---@param vendor_path_prefix string
+---@param project_path_prefix string
 ---@param processed_items table<string, boolean>
 function utils:process_query(
 	opts,
 	bufnr,
 	cache,
 	callback,
-	project_path,
 	cursor_prefix_word,
 	vendor_path_prefix,
+	project_path_prefix,
 	processed_items
 )
 	---@type table?
-	local result = {}
-	local current_prefix = cursor_prefix_word
-	while (result == nil or #result == 0) and #current_prefix > 0 do
-		result = cache:load(project_path, current_prefix)
-		current_prefix = current_prefix:sub(1, #current_prefix - 1)
-	end
-
+	local result = cache:load(cursor_prefix_word)
 	if result == nil then
 		return callback({ items = {}, isIncomplete = true })
 	end
 
 	local items = {}
 	local package_name_cache = {}
-	local imported_paths = utils.get_imported_paths(bufnr)
+	local imported_paths = utils.get_imported_paths(opts, bufnr)
 
 	---@type table<string, boolean>
 	local used_aliases = {}
@@ -277,9 +277,12 @@ function utils:process_query(
 		end
 		processed_items[hash] = true
 
-		if symbol.vendored then
+		if symbol.isVendored then
 			symbol.location.uri = vendor_path_prefix .. symbol.location.uri
+		elseif symbol.isLocal then
+			symbol.location.uri = project_path_prefix .. symbol.location.uri
 		end
+
 		local symbol_dir = vim.fn.fnamemodify(symbol.location.uri, ":h")
 
 		if
@@ -287,39 +290,37 @@ function utils:process_query(
 			and not imported_paths[symbol.containerName]
 			and symbol.location.uri ~= current_buf_uri
 			and symbol_dir ~= current_buf_dir
-			and not (opts.exclude_vendored_packages and symbol.vendored)
+			and not (opts.exclude_vendored_packages and symbol.isVendored)
 		then
 			local package_name, file_exists = utils.get_package_name(opts, symbol.location.uri, package_name_cache)
-			if package_name == nil and file_exists then
+			if not file_exists then
+				goto continue
+			end
+
+			if package_name == nil then
 				package_name = symbol.containerName:match("([^/]+)$"):gsub("-", "_")
-				if opts.debug then
-					vim.notify(
-						"Package name not found for uri: "
-							.. symbol.location.uri
-							.. "\nDefaulting to directory name: "
-							.. package_name,
-						vim.log.levels.WARN
-					)
-				end
+			end
+			if not package_name then
+				goto continue
 			end
 
-			if file_exists and package_name then
-				local package_alias = utils.get_unique_package_alias(used_aliases, package_name)
-				if package_alias ~= package_name then
-					symbol.package_alias = package_alias
-				end
-				symbol.bufnr = bufnr
-				symbol.opts = opts
-
-				table.insert(items, {
-					label = package_alias .. "." .. symbol.name,
-					sortText = symbol.name,
-					kind = kind,
-					detail = '"' .. symbol.containerName .. '"',
-					data = symbol,
-				})
+			local package_alias = utils.get_unique_package_alias(used_aliases, package_name)
+			if package_alias ~= package_name then
+				symbol.package_alias = package_alias
 			end
+
+			symbol.bufnr = bufnr
+			symbol.opts = opts
+
+			table.insert(items, {
+				label = package_alias .. "." .. symbol.name,
+				sortText = symbol.name,
+				kind = kind,
+				detail = '"' .. symbol.containerName .. '"',
+				data = symbol,
+			})
 		end
+
 		::continue::
 	end
 

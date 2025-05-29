@@ -79,8 +79,8 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 ### Default options
 ```lua
 {
-	-- Enable/disable timeout notifications.
-	timeout_notifications = true,
+	-- Enabledisable notifications.
+	notifications = true,
 
 	-- How to get documentation for Go symbols.
 	-- options:
@@ -102,7 +102,7 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	documentation_wait_timeout_ms = 100,
 
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and sending it to gopls.
-	debounce_gopls_requests_ms = 350
+	debounce_gopls_requests_ms = 250
 
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and loading data from cache.
 	debounce_cache_requests_ms = 50
