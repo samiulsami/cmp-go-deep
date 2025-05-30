@@ -20,7 +20,7 @@ local default_options = {
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 100,
-	debounce_gopls_requests_ms = 350,
+	debounce_gopls_requests_ms = 250,
 	debounce_cache_requests_ms = 50,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 	db_size_limit_bytes = 200 * 1024 * 1024,
@@ -67,8 +67,8 @@ source.complete = function(_, params, callback)
 			utils.debounce(gopls_requests.workspace_symbols, opts.debounce_gopls_requests_ms)
 	end
 
-	if not utils.debounced_process_query then
-		utils.debounced_process_query = utils.debounce(utils.process_query, opts.debounce_cache_requests_ms)
+	if not utils.debounced_process_symbols then
+		utils.debounced_process_symbols = utils.debounce(utils.process_symbols, opts.debounce_cache_requests_ms)
 	end
 
 	---@type table<string, boolean>
@@ -79,47 +79,57 @@ source.complete = function(_, params, callback)
 	local vendor_path_prefix = "file://" .. project_path .. "/vendor/"
 	local project_path_prefix = "file://" .. project_path .. "/"
 
-	utils:debounced_process_query(
+	utils:debounced_process_symbols(
 		opts,
 		bufnr,
-		source.cache,
 		callback,
-		cursor_prefix_word,
 		vendor_path_prefix,
 		project_path_prefix,
-		processed_items
+		source.cache:load(cursor_prefix_word),
+		processed_items,
+		true
 	)
 
 	gopls_requests.debounced_workspace_symbols(opts, gopls_client, bufnr, cursor_prefix_word, function(result)
-		if result then
-			local filtered_result = {}
-			for _, symbol in ipairs(result) do
-				if
-					utils.symbol_to_completion_kind(symbol.kind)
-					and symbol.name:match("^[A-Z]")
-					and not symbol.location.uri:match("_test%.go$")
-				then
-					if string.sub(symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix then
-						symbol.isVendored = true
-						symbol.location.uri = symbol.location.uri:sub(#vendor_path_prefix + 1)
-					elseif string.sub(symbol.location.uri, 1, #project_path_prefix) == project_path_prefix then
-						symbol.isLocal = true
-						symbol.location.uri = symbol.location.uri:sub(#project_path_prefix + 1)
-					end
-					table.insert(filtered_result, symbol)
-				end
-			end
-			source.cache:save(utils, filtered_result)
+		if not result then
+			return callback({ items = {}, isIncomplete = false })
 		end
-		utils:debounced_process_query(
+
+		local filtered_result = {}
+		for _, symbol in ipairs(result) do
+			if
+				utils.symbol_to_completion_kind(symbol.kind)
+				and symbol.name:match("^[A-Z]")
+				and not symbol.location.uri:match("_test%.go$")
+				and (#cursor_prefix_word > 2 or symbol.name:find(cursor_prefix_word, 1, true))
+			then
+				if string.sub(symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix then
+					symbol.isVendored = true
+					symbol.location.uri = symbol.location.uri:sub(#vendor_path_prefix + 1)
+				elseif string.sub(symbol.location.uri, 1, #project_path_prefix) == project_path_prefix then
+					symbol.isLocal = true
+					symbol.location.uri = symbol.location.uri:sub(#project_path_prefix + 1)
+				end
+				table.insert(filtered_result, symbol)
+			end
+		end
+
+		source.cache:save(utils, filtered_result)
+
+		local toProcess = filtered_result
+		if #cursor_prefix_word > 2 then
+			toProcess = source.cache:load(cursor_prefix_word)
+		end
+
+		utils:debounced_process_symbols(
 			opts,
 			bufnr,
-			source.cache,
 			callback,
-			cursor_prefix_word,
 			vendor_path_prefix,
 			project_path_prefix,
-			processed_items
+			toProcess,
+			processed_items,
+			#result >= 100
 		)
 	end)
 end

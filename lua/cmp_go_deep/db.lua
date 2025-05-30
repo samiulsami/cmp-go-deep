@@ -1,6 +1,7 @@
 local sqlstmt = require("sqlite.stmt")
 ---@type sqlite_db
 local sqlite = require("sqlite.db")
+local math = require("math")
 
 ---@class cmp_go_deep.DB
 ---@field public setup fun(opts: cmp_go_deep.Options): cmp_go_deep.DB?
@@ -10,11 +11,11 @@ local sqlite = require("sqlite.db")
 ---@field private db sqlite_db
 ---@field private db_path string
 ---@field private max_db_size_bytes number
----@field private total_rows number
+---@field private total_rows_estimate number -- pessimistic overestimation
 ---@field private notifications boolean
+---@field private MAX_ROWS_THRESHOLD number
 local DB = {}
-local SCHEMA_VERSION = "0.0.4"
-local MAGIC = 100000
+local SCHEMA_VERSION = "0.0.5"
 
 ---@param opts cmp_go_deep.Options
 ---@return cmp_go_deep.DB?
@@ -23,6 +24,8 @@ function DB.setup(opts)
 	DB.db_path = opts.db_path
 	DB.max_db_size_bytes = opts.db_size_limit_bytes
 	DB.db = sqlite:open(opts.db_path)
+	DB.MAX_ROWS_THRESHOLD = math.min(100000, math.floor(opts.db_size_limit_bytes / 1024))
+	DB.MAX_ROWS_THRESHOLD = math.max(DB.MAX_ROWS_THRESHOLD, 10000)
 
 	---TODO: rtfm and fine-tune these
 	local result = DB.db:eval("PRAGMA journal_mode = WAL")
@@ -36,7 +39,7 @@ function DB.setup(opts)
 	DB.db:eval("PRAGMA cache_size = -10000")
 	DB.db:eval("PRAGMA wal_autocheckpoint = 1000")
 	DB.db:eval("PRAGMA page_size = 4096")
-	DB.db:eval("PRAGMA auto_vacuum = FULL")
+	DB.db:eval("PRAGMA auto_vacuum = incremental")
 	DB.db:eval("PRAGMA max_page_count = " .. math.ceil(DB.max_db_size_bytes / 4096))
 
 	DB.db:eval([[
@@ -52,8 +55,6 @@ function DB.setup(opts)
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbol_cache")
-		DB.db:eval("PRAGMA wal_checkpoint(FULL)")
-		DB.db:eval("VACUUM")
 	end
 
 	local tables = {
@@ -74,8 +75,7 @@ function DB.setup(opts)
 	}
 
 	for _, sql in ipairs(tables) do
-		local ok = DB.db:eval(sql)
-		if not ok then
+		if not DB.db:eval(sql) then
 			if DB.notifications then
 				vim.notify("[sqlite] failed to create table", vim.log.levels.ERROR)
 			end
@@ -90,7 +90,11 @@ function DB.setup(opts)
 		end
 		return nil
 	end
-	DB.total_rows = res[1].count
+	DB.total_rows_estimate = res[1].count
+
+	if opts.debug then
+		vim.notify("[sqlite] db row count: " .. DB.total_rows_estimate, vim.log.levels.INFO)
+	end
 
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_last_modified ON gosymbols (last_modified DESC);")
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_hash ON gosymbols (hash DESC);")
@@ -126,7 +130,7 @@ end
 
 ---@return nil
 function DB:prune()
-	if self.total_rows < MAGIC then
+	if self.total_rows_estimate < self.MAX_ROWS_THRESHOLD then
 		return
 	end
 
@@ -137,30 +141,37 @@ function DB:prune()
 		end
 		return
 	end
-	self.total_rows = res[1].count
+	self.total_rows_estimate = res[1].count
 
-	if self.total_rows < MAGIC then
-		return
-	end
+	local to_delete = math.floor(self.total_rows_estimate * 0.2)
+	to_delete = math.min(to_delete, 3493)
 
-	local to_delete = math.floor(self.total_rows * 0.25)
 	if to_delete == 0 then
 		return
 	end
 
-	local delete_lru = sqlstmt:parse(
+	local delete_fts = sqlstmt:parse(
 		self.db.conn,
 		[[
-			WITH to_delete AS (
-			  SELECT id FROM gosymbols ORDER BY last_modified ASC LIMIT ?
-			),
-			del1 AS (
-			  DELETE FROM gosymbols_fts WHERE id IN (SELECT id FROM to_delete)
-			)
-			DELETE FROM gosymbols WHERE id IN (SELECT id FROM to_delete);
+		  DELETE FROM gosymbols_fts
+		  WHERE id IN (
+		    SELECT id FROM gosymbols ORDER BY last_modified ASC LIMIT ?
+		  );
 		]]
 	)
-	delete_lru:bind({ to_delete })
+
+	local delete_gosymbols = sqlstmt:parse(
+		self.db.conn,
+		[[
+		  DELETE FROM gosymbols
+		  WHERE id IN (
+		    SELECT id FROM gosymbols ORDER BY last_modified ASC LIMIT ?
+		  );
+		]]
+	)
+
+	delete_gosymbols:bind({ to_delete })
+	delete_fts:bind({ to_delete })
 
 	if not self.db:eval("BEGIN TRANSACTION;") then
 		if self.notifications then
@@ -177,34 +188,36 @@ function DB:prune()
 		end
 	end
 
-	if delete_lru:step() ~= sqlite.flags["done"] then
-		return rollback("failed to perform deletion")
+	if delete_fts:step() ~= sqlite.flags["done"] then
+		return rollback("failed to perform deletion of gosymbols_fts")
 	end
-	if not delete_lru:finalize() then
-		return rollback("failed to finalize deletion")
+	if not delete_fts:finalize() then
+		return rollback("failed to finalize deletion of gosymbols_fts")
+	end
+
+	if delete_gosymbols:step() ~= sqlite.flags["done"] then
+		return rollback("failed to perform deletion of gosymbols")
+	end
+	if not delete_gosymbols:finalize() then
+		return rollback("failed to finalize deletion of gosymbols")
 	end
 
 	if not self.db:eval("END TRANSACTION;") then
 		return rollback("failed to end transaction")
 	end
 
-	if not self.db:eval("PRAGMA wal_checkpoint(TRUNCATE)") then
-		if self.notifications then
-			vim.notify("[sqlite] failed to checkpoint", vim.log.levels.ERROR)
-		end
-	end
-	if not self.db:eval("VACUUM") then
-		if self.notifications then
-			vim.notify("[sqlite] failed to vacuum", vim.log.levels.ERROR)
-		end
-	end
+	self.total_rows_estimate = self.total_rows_estimate - to_delete
 
-	self.total_rows = self.total_rows - to_delete
+	if not self.db:eval("PRAGMA incremental_vacuum(0)") then
+		if self.notifications then
+			vim.notify("[sqlite] failed to perform incremental vacuum", vim.log.levels.ERROR)
+		end
+	end
 end
 
 ---@param utils cmp_go_deep.utils
 ---@param symbol_information table
-function DB:save(utils, symbol_information)
+function DB:save(utils, symbol_information) --- assumes that gopls doesn't return more than 100 workspace symbols
 	local insert_gosymbols = sqlstmt:parse(
 		self.db.conn,
 		[[
@@ -212,10 +225,10 @@ function DB:save(utils, symbol_information)
 		    VALUES (?, ?, ?, ?);
 		]]
 	)
-	local select_id = sqlstmt:parse(
+	local last_insert_rowid_stmt = sqlstmt:parse(
 		self.db.conn,
 		[[
-		    SELECT id FROM gosymbols WHERE hash = ?;
+		    SELECT last_insert_rowid();
 		]]
 	)
 	local insert_gosymbols_fts = sqlstmt:parse(
@@ -254,13 +267,12 @@ function DB:save(utils, symbol_information)
 			return rollback("failed to reset insert_gosymbols")
 		end
 
-		select_id:bind({ hash })
-		if select_id:step() ~= sqlite.flags["row"] then
+		if last_insert_rowid_stmt:step() ~= sqlite.flags["row"] then
 			return rollback("failed to select id")
 		end
-		local id = select_id:val(0)
-		if select_id:reset() ~= sqlite.flags["ok"] then
-			return rollback("failed to reset select_id")
+		local id = last_insert_rowid_stmt:val(0)
+		if last_insert_rowid_stmt:reset() ~= sqlite.flags["ok"] then
+			return rollback("failed to reset last_insert_rowid_stmt")
 		end
 
 		insert_gosymbols_fts:bind({ symbol.name, id })
@@ -275,8 +287,8 @@ function DB:save(utils, symbol_information)
 	if not insert_gosymbols:finalize() then
 		return rollback("failed to finalize insert_gosymbols")
 	end
-	if not select_id:finalize() then
-		return rollback("failed to finalize select_id")
+	if not last_insert_rowid_stmt:finalize() then
+		return rollback("failed to finalize last_insert_rowid_stmt")
 	end
 	if not insert_gosymbols_fts:finalize() then
 		return rollback("failed to finalize insert_gosymbols_fts")
@@ -286,8 +298,11 @@ function DB:save(utils, symbol_information)
 		return rollback("failed to end transaction")
 	end
 
-	self.total_rows = self.total_rows + #symbol_information
-	self:prune()
+	self.total_rows_estimate = self.total_rows_estimate + #symbol_information
+
+	vim.schedule(function()
+		self:prune()
+	end)
 end
 
 return DB

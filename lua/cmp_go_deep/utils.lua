@@ -13,8 +13,8 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
 ---@field deterministic_symbol_hash fun(symbol: lsp.SymbolInformation): string
----@field process_query fun(self, opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, cursor_prefix_word: string, vendor_prefix: string, project_path_prefix: string, processed_items: table<string, boolean>): nil
----@field debounced_process_query fun(self, opts: cmp_go_deep.Options, bufnr: integer, cache: cmp_go_deep.DB, callback: any, cursor_prefix_word: string, vendor_prefix: string, project_path_prefix: string, processed_items: table<string, boolean>): nil
+---@field process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, callback: any, vendor_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>, isIncomplete: boolean): nil
+---@field debounced_process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, callback: any, vendor_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>, isIncomplete: boolean): nil
 local utils = {}
 
 local symbol_to_completion_kind = {
@@ -233,28 +233,22 @@ end
 
 ---@param opts cmp_go_deep.Options
 ---@param bufnr integer
----@param cache cmp_go_deep.DB
 ---@param callback any
----@param cursor_prefix_word string
 ---@param vendor_path_prefix string
 ---@param project_path_prefix string
+---@param symbols table
 ---@param processed_items table<string, boolean>
-function utils:process_query(
+---@param isIncomplete boolean
+function utils:process_symbols(
 	opts,
 	bufnr,
-	cache,
 	callback,
-	cursor_prefix_word,
 	vendor_path_prefix,
 	project_path_prefix,
-	processed_items
+	symbols,
+	processed_items,
+	isIncomplete
 )
-	---@type table?
-	local result = cache:load(cursor_prefix_word)
-	if result == nil then
-		return callback({ items = {}, isIncomplete = true })
-	end
-
 	local items = {}
 	local package_name_cache = {}
 	local imported_paths = utils.get_imported_paths(opts, bufnr)
@@ -269,7 +263,7 @@ function utils:process_query(
 	local current_buf_dir = vim.fn.fnamemodify(current_buf_uri, ":h")
 
 	---TODO: better type checking and error handling
-	for _, symbol in ipairs(result) do
+	for _, symbol in ipairs(symbols) do
 		local kind = utils.symbol_to_completion_kind(symbol.kind)
 		local hash = self.deterministic_symbol_hash(symbol)
 		if processed_items[hash] then
@@ -324,7 +318,7 @@ function utils:process_query(
 		::continue::
 	end
 
-	return callback({ items = items, isIncomplete = true })
+	return callback({ items = items, isIncomplete = isIncomplete })
 end
 
 return utils
