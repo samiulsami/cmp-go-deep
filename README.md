@@ -106,8 +106,8 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and loading data from cache.
 	debounce_cache_requests_ms = 50
-	-- Path to store the SQLite database
 
+	-- Path to store the SQLite database
 	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 
