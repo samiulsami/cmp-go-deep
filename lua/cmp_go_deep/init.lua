@@ -107,7 +107,7 @@ source.complete = function(_, params, callback)
 	)
 
 	gopls_requests.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
-		if not result then
+		if not result or #result == 0 then
 			return callback({ items = {}, isIncomplete = false })
 		end
 
@@ -145,7 +145,7 @@ source.complete = function(_, params, callback)
 			project_path_prefix,
 			toProcess,
 			processed_items,
-			#result >= 100
+			true
 		)
 	end)
 end
