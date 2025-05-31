@@ -79,7 +79,7 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 ### Default options
 ```lua
 {
-	-- Enabledisable notifications.
+	-- Enable/disable notifications.
 	notifications = true,
 
 	-- How to get documentation for Go symbols.

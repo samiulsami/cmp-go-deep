@@ -143,7 +143,7 @@ function DB:prune()
 	self.total_rows_estimate = res[1].count
 
 	local to_delete = math.floor(self.total_rows_estimate * 0.2)
-	to_delete = math.min(to_delete, 3493)
+	to_delete = math.min(to_delete, 5000)
 
 	if to_delete == 0 then
 		return
