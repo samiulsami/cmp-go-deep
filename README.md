@@ -40,7 +40,7 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
         sources = {{
             name = "go_deep",
 	    keyword_length = 3,
-	    max_item_count = 5
+	    max_item_count = 5,
             ---@module "cmp_go_deep"
 	    ---@type cmp_go_deep.Options
             option = {
