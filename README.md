@@ -86,6 +86,9 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	-- Enable/disable notifications.
 	notifications = true,
 
+	-- Filetypes to enable the source for.
+	filetypes = { "go" },
+
 	-- How to get documentation for Go symbols.
 	-- options:
 	-- "hover" - LSP 'textDocument/hover'. Prettier.

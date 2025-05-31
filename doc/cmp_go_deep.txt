@@ -14,11 +14,14 @@ SETUP-nvim-cmp                                                 *cmp_go_deep-setu
     dependencies = {
 	{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
     },
+    ...
     require("cmp").setup({
         sources = {{
             name = "go_deep",
+	    keyword_length = 3,
+	    max_item_count = 5,
             ---@module "cmp_go_deep"
-            ---@type cmp_go_deep.Options
+	    ---@type cmp_go_deep.Options
             option = {
                 -- See below for configuration options
             },
@@ -45,6 +48,8 @@ SETUP-blink.cmp                                               *cmp_go_deep-setup
 				go_deep = {
 					name = "go_deep",
 					module = "blink.compat.source",
+					min_keyword_length = 3,
+					max_items = 5,
 					---@module "cmp_go_deep"
 					---@type cmp_go_deep.Options
 					opts = {
@@ -65,6 +70,10 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
     • `notifications`
         Enable/disable notifications.
         Default: `true`
+
+    • `filetypes`
+        Filetypes to enable the source for.
+        Default: `{"go"}`
 
     • `get_documentation_implementation`
         How to get documentation for Go symbols.
