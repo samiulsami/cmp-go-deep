@@ -14,7 +14,7 @@ local math = require("math")
 ---@field private notifications boolean
 ---@field private MAX_ROWS_THRESHOLD number
 local DB = {}
-local SCHEMA_VERSION = "0.0.5"
+local SCHEMA_VERSION = "0.0.6"
 
 ---@param opts cmp_go_deep.Options
 ---@return cmp_go_deep.DB?

@@ -233,7 +233,13 @@ utils.deterministic_symbol_hash = function(symbol)
 		.. " #"
 		.. symbol.containerName
 		.. " #"
-		.. vim.json.encode(symbol.location.range)
+		.. string.format(
+			"%d-%d,%d-%d",
+			symbol.location.range.start.character,
+			symbol.location.range.start.line,
+			symbol.location.range["end"].character,
+			symbol.location.range["end"].line
+		)
 	return vim.fn.sha256(ordered)
 end
 
