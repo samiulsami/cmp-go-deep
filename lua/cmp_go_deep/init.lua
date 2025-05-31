@@ -2,7 +2,7 @@ local utils = require("cmp_go_deep.utils")
 local gopls_requests = require("cmp_go_deep.gopls_requests")
 
 ---@class cmp_go_deep.Options
----@field public timeout_notifications boolean | nil -- whether to show timeout notifications. default: true
+---@field public notifications boolean | nil -- whether to show notifications. default: true
 ---@field public get_documentation_implementation "hover" | "regex" | nil -- how to get documentation. default: "regex"
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil -- how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
 ---@field public exclude_vendored_packages boolean | nil -- whether to exclude vendored packages. default: false
@@ -15,12 +15,12 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 
 ---@type cmp_go_deep.Options
 local default_options = {
-	timeout_notifications = true,
+	notifications = true,
 	get_documentation_implementation = "regex",
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 100,
-	debounce_gopls_requests_ms = 350,
+	debounce_gopls_requests_ms = 250,
 	debounce_cache_requests_ms = 50,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 	db_size_limit_bytes = 200 * 1024 * 1024,
@@ -67,8 +67,8 @@ source.complete = function(_, params, callback)
 			utils.debounce(gopls_requests.workspace_symbols, opts.debounce_gopls_requests_ms)
 	end
 
-	if not utils.debounced_process_query then
-		utils.debounced_process_query = utils.debounce(utils.process_query, opts.debounce_cache_requests_ms)
+	if not utils.debounced_process_symbols then
+		utils.debounced_process_symbols = utils.debounce(utils.process_symbols, opts.debounce_cache_requests_ms)
 	end
 
 	---@type table<string, boolean>
@@ -77,45 +77,59 @@ source.complete = function(_, params, callback)
 	local bufnr = vim.api.nvim_get_current_buf()
 	local project_path = vim.fn.getcwd()
 	local vendor_path_prefix = "file://" .. project_path .. "/vendor/"
+	local project_path_prefix = "file://" .. project_path .. "/"
 
-	utils:debounced_process_query(
+	utils:debounced_process_symbols(
 		opts,
 		bufnr,
-		source.cache,
 		callback,
-		project_path,
-		cursor_prefix_word,
 		vendor_path_prefix,
-		processed_items
+		project_path_prefix,
+		source.cache:load(cursor_prefix_word),
+		processed_items,
+		true
 	)
 
-	gopls_requests.debounced_workspace_symbols(gopls_client, bufnr, cursor_prefix_word, function(result)
-		if result then
-			local filtered_result = {}
-			for _, symbol in ipairs(result) do
-				if
-					utils.symbol_to_completion_kind(symbol.kind)
-					and symbol.name:match("^[A-Z]")
-					and not symbol.location.uri:match("_test%.go$")
-				then
-					symbol.vendored = string.sub(symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix
-					if symbol.vendored then
-						symbol.location.uri = symbol.location.uri:sub(#vendor_path_prefix + 1)
-					end
-					table.insert(filtered_result, symbol)
-				end
-			end
-			source.cache:save(utils, project_path, filtered_result)
+	gopls_requests.debounced_workspace_symbols(opts, gopls_client, bufnr, cursor_prefix_word, function(result)
+		if not result then
+			return callback({ items = {}, isIncomplete = false })
 		end
-		utils:debounced_process_query(
+
+		local filtered_result = {}
+		for _, symbol in ipairs(result) do
+			if
+				utils.symbol_to_completion_kind(symbol.kind)
+				and symbol.name:match("^[A-Z]")
+				and not symbol.location.uri:match("_test%.go$")
+				and (#cursor_prefix_word > 2 or symbol.name:find(cursor_prefix_word, 1, true))
+			then
+				if string.sub(symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix then
+					symbol.isVendored = true
+					symbol.location.uri = symbol.location.uri:sub(#vendor_path_prefix + 1)
+				elseif string.sub(symbol.location.uri, 1, #project_path_prefix) == project_path_prefix then
+					symbol.isLocal = true
+					symbol.location.uri = symbol.location.uri:sub(#project_path_prefix + 1)
+				end
+				table.insert(filtered_result, symbol)
+			end
+		end
+
+		source.cache:save(utils, filtered_result)
+
+		local toProcess = filtered_result
+		if #cursor_prefix_word > 2 then
+			toProcess = source.cache:load(cursor_prefix_word)
+		end
+
+		utils:debounced_process_symbols(
 			opts,
 			bufnr,
-			source.cache,
 			callback,
-			project_path,
-			cursor_prefix_word,
 			vendor_path_prefix,
-			processed_items
+			project_path_prefix,
+			toProcess,
+			processed_items,
+			#result >= 100
 		)
 	end)
 end
@@ -126,26 +140,29 @@ function source:resolve(completion_item, callback)
 	local symbol = completion_item.data
 
 	if symbol == nil then
-		vim.notify("Warning: symbol data is missing", vim.log.levels.WARN)
 		return callback(nil)
-	end
-
-	if not type(symbol.location) == "table" then
-		vim.notify("Warning: symbol location is missing", vim.log.levels.WARN)
-		return callback(completion_item)
-	end
-
-	---@type lsp.Location
-	local location = symbol.location
-	if not location or not location.uri or not location.range then
-		vim.notify("Warning: symbol location is missing", vim.log.levels.WARN)
-		return callback(completion_item)
 	end
 
 	---@type cmp_go_deep.Options|nil
 	local opts = symbol.opts
 	if not opts then
 		vim.notify("Warning: symbol data is missing options", vim.log.levels.WARN)
+		return callback(completion_item)
+	end
+
+	if not type(symbol.location) == "table" then
+		if opts.notifications then
+			vim.notify("Warning: symbol location is missing", vim.log.levels.WARN)
+		end
+		return callback(completion_item)
+	end
+
+	---@type lsp.Location
+	local location = symbol.location
+	if not location or not location.uri or not location.range then
+		if opts.notifications then
+			vim.notify("Warning: symbol location is missing", vim.log.levels.WARN)
+		end
 		return callback(completion_item)
 	end
 
@@ -171,9 +188,15 @@ function source:execute(completion_item, callback)
 	local import_path = symbol.containerName
 	local package_name = symbol.package_alias
 
+	---@type cmp_go_deep.Options|nil
+	local opts = symbol.opts
+	if not opts then
+		return
+	end
+
 	if import_path and vim.bo.filetype == "go" then
-		utils.add_import_statement(symbol.bufnr, package_name, import_path)
-	else
+		utils.add_import_statement(opts, symbol.bufnr, package_name, import_path)
+	elseif opts and opts.notifications then
 		vim.notify("Import path not found", vim.log.levels.WARN)
 	end
 

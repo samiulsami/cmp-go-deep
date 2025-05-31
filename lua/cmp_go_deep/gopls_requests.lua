@@ -1,7 +1,7 @@
 ---@class cmp_go_deep.gopls_requests
 ---@field get_documentation fun(opts: cmp_go_deep.Options, gopls_client: vim.lsp.Client | nil, uri: string, range: lsp.Range): string|nil
----@field debounced_workspace_symbols fun(gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
----@field public workspace_symbols fun(gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
+---@field debounced_workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
+---@field public workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
 local gopls_requests = {}
 
 ---@param opts cmp_go_deep.Options
@@ -12,7 +12,9 @@ local gopls_requests = {}
 ---TODO: try completionItem/resolve instead
 gopls_requests.get_documentation = function(opts, gopls_client, uri, range)
 	if gopls_client == nil then
-		vim.notify("gopls client is nil", vim.log.levels.WARN)
+		if opts.notifications then
+			vim.notify("gopls client is nil", vim.log.levels.WARN)
+		end
 		return nil
 	end
 
@@ -25,7 +27,9 @@ gopls_requests.get_documentation = function(opts, gopls_client, uri, range)
 
 	gopls_client:request("textDocument/hover", params, function(err, result)
 		if err then
-			vim.notify("failed to get documentation: " .. err.message, vim.log.levels.WARN)
+			if opts.notifications then
+				vim.notify("failed to get documentation: " .. err.message, vim.log.levels.WARN)
+			end
 			return
 		end
 
@@ -38,19 +42,22 @@ gopls_requests.get_documentation = function(opts, gopls_client, uri, range)
 		return markdown ~= ""
 	end, 10)
 
-	if markdown == "" and opts.timeout_notifications then
-		vim.notify("timed out waiting for documentation", vim.log.levels.WARN)
+	if markdown == "" and opts.notifications then
+		if opts.notifications then
+			vim.notify("timed out waiting for documentation", vim.log.levels.WARN)
+		end
 	end
 
 	return markdown
 end
 
+---@param opts cmp_go_deep.Options
 ---@param gopls_client vim.lsp.Client
 ---@param bufnr integer
 ---@param cursor_prefix_word string
 ---@param callback fun(items: lsp.SymbolInformation[]): nil
 -- stylua: ignore
-gopls_requests.workspace_symbols = function(gopls_client, bufnr, cursor_prefix_word, callback)
+gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, cursor_prefix_word, callback)
 	local success, _ = gopls_client:request("workspace/symbol", { query = cursor_prefix_word }, function(_, result)
 		if not result then
 			return
@@ -59,7 +66,9 @@ gopls_requests.workspace_symbols = function(gopls_client, bufnr, cursor_prefix_w
 	end, bufnr)
 
 	if not success then
-		vim.notify("failed to get workspace symbols", vim.log.levels.WARN)
+		if opts.notifications then
+			vim.notify("failed to get workspace symbols", vim.log.levels.WARN)
+		end
 		return
 	end
 end
