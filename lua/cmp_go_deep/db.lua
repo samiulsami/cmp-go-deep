@@ -7,7 +7,6 @@ local math = require("math")
 ---@field public setup fun(opts: cmp_go_deep.Options): cmp_go_deep.DB?
 ---@field public load fun(self, query_string: string): table
 ---@field public save fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
----@field public modified boolean
 ---@field private db sqlite_db
 ---@field private db_path string
 ---@field private max_db_size_bytes number
