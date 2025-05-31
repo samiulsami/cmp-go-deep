@@ -39,6 +39,8 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
     require("cmp").setup({
         sources = {{
             name = "go_deep",
+	    keyword_length = 3,
+	    max_item_count = 5
             ---@module "cmp_go_deep"
 	    ---@type cmp_go_deep.Options
             option = {
@@ -65,6 +67,8 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 				go_deep = {
 					name = "go_deep",
 					module = "blink.compat.source",
+					min_keyword_length = 3,
+					max_items = 5,
 					---@module "cmp_go_deep"
 					---@type cmp_go_deep.Options
 					opts = {
