@@ -3,6 +3,7 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 
 ---@class cmp_go_deep.Options
 ---@field public notifications boolean | nil -- whether to show notifications. default: true
+---@field public filetypes string[] | nil -- filetypes to enable the source for
 ---@field public get_documentation_implementation "hover" | "regex" | nil -- how to get documentation. default: "regex"
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil -- how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
 ---@field public exclude_vendored_packages boolean | nil -- whether to exclude vendored packages. default: false
@@ -16,6 +17,7 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 ---@type cmp_go_deep.Options
 local default_options = {
 	notifications = true,
+	filetypes = { "go" },
 	get_documentation_implementation = "regex",
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
@@ -33,8 +35,19 @@ source.new = function()
 	return setmetatable({}, { __index = source })
 end
 
+---@param haystack string[]
+---@param needle string
+local contains = function(haystack, needle)
+	for _, key in pairs(haystack) do
+		if key == needle then
+			return true
+		end
+	end
+	return false
+end
+
 source.is_available = function()
-	if vim.bo.filetype ~= "go" or utils.get_gopls_client() == nil then
+	if utils.get_gopls_client() == nil then
 		return false
 	end
 	return true
@@ -50,25 +63,28 @@ source.complete = function(_, params, callback)
 		return callback({ items = {}, isIncomplete = false })
 	end
 
+	---@type cmp_go_deep.Options
+	source.opts = vim.tbl_deep_extend("force", default_options, params.option or params.opts or {})
+	if not contains(source.opts.filetypes, vim.bo.filetype) then
+		return callback({ items = {}, isIncomplete = false })
+	end
+
 	local cursor_prefix_word = utils.get_cursor_prefix_word(0)
 	if cursor_prefix_word:match("[%.]") or cursor_prefix_word:match("[^%w_]") then
 		return callback({ items = {}, isIncomplete = false })
 	end
 
-	---@type cmp_go_deep.Options
-	local opts = vim.tbl_deep_extend("force", default_options, params.option or params.opts or {})
-
 	if not source.cache then
-		source.cache = require("cmp_go_deep.db").setup(opts)
+		source.cache = require("cmp_go_deep.db").setup(source.opts)
 	end
 
 	if not gopls_requests.debounced_workspace_symbols then
 		gopls_requests.debounced_workspace_symbols =
-			utils.debounce(gopls_requests.workspace_symbols, opts.debounce_gopls_requests_ms)
+			utils.debounce(gopls_requests.workspace_symbols, source.opts.debounce_gopls_requests_ms)
 	end
 
 	if not utils.debounced_process_symbols then
-		utils.debounced_process_symbols = utils.debounce(utils.process_symbols, opts.debounce_cache_requests_ms)
+		utils.debounced_process_symbols = utils.debounce(utils.process_symbols, source.opts.debounce_cache_requests_ms)
 	end
 
 	---@type table<string, boolean>
@@ -80,7 +96,7 @@ source.complete = function(_, params, callback)
 	local project_path_prefix = "file://" .. project_path .. "/"
 
 	utils:debounced_process_symbols(
-		opts,
+		source.opts,
 		bufnr,
 		callback,
 		vendor_path_prefix,
@@ -90,7 +106,7 @@ source.complete = function(_, params, callback)
 		true
 	)
 
-	gopls_requests.debounced_workspace_symbols(opts, gopls_client, bufnr, cursor_prefix_word, function(result)
+	gopls_requests.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
 		if not result then
 			return callback({ items = {}, isIncomplete = false })
 		end
@@ -122,7 +138,7 @@ source.complete = function(_, params, callback)
 		end
 
 		utils:debounced_process_symbols(
-			opts,
+			source.opts,
 			bufnr,
 			callback,
 			vendor_path_prefix,
@@ -180,13 +196,14 @@ end
 ---@param completion_item lsp.CompletionItem
 ---@param callback fun(completion_item: lsp.CompletionItem|nil)
 function source:execute(completion_item, callback)
+	if vim.bo.filetype ~= "go" then
+		return
+	end
+
 	local symbol = completion_item.data
 	if not symbol then
 		return
 	end
-
-	local import_path = symbol.containerName
-	local package_name = symbol.package_alias
 
 	---@type cmp_go_deep.Options|nil
 	local opts = symbol.opts
@@ -194,12 +211,17 @@ function source:execute(completion_item, callback)
 		return
 	end
 
-	if import_path and vim.bo.filetype == "go" then
-		utils.add_import_statement(opts, symbol.bufnr, package_name, import_path)
-	elseif opts and opts.notifications then
-		vim.notify("Import path not found", vim.log.levels.WARN)
+	local import_path = symbol.containerName
+	local package_name = symbol.package_alias
+
+	if not import_path then
+		if opts.notifications then
+			vim.notify("import path not found", vim.log.levels.WARN)
+		end
+		return
 	end
 
+	utils.add_import_statement(opts, symbol.bufnr, package_name, import_path)
 	callback(completion_item)
 end
 
