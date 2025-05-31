@@ -227,7 +227,13 @@ end
 ---@param symbol lsp.SymbolInformation
 ---@return string
 utils.deterministic_symbol_hash = function(symbol)
-	local ordered = symbol.name .. " #" .. symbol.kind .. " #" .. symbol.location.uri .. " #" .. symbol.containerName
+	local ordered = symbol.name
+		.. " #"
+		.. symbol.kind
+		.. " #"
+		.. symbol.containerName
+		.. " #"
+		.. vim.json.encode(symbol.location.range)
 	return vim.fn.sha256(ordered)
 end
 
@@ -269,6 +275,7 @@ function utils:process_symbols(
 		if processed_items[hash] then
 			goto continue
 		end
+
 		processed_items[hash] = true
 
 		if symbol.isVendored then
