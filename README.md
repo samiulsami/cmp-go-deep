@@ -125,7 +125,8 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 ---
 #### TODO
 - [x] Cache results for faster completions.
-- [x] Cross-project cache sharing for internal packages
-- [x] Better memory usage
+- [x] Cross-project cache sharing for internal packages.
+- [x] Better memory usage.
 - [ ] ~~Remove the indirect dependency on ```cmp-nvim-lsp``` or ```blink.cmp's``` LSP source.~~
-- [ ] Archive after [this issue](https://github.com/golang/go/issues/38528) is properly addressed
+- [ ] Don't ignore package names while matching symbols.
+- [ ] Archive after [this issue](https://github.com/golang/go/issues/38528) is properly addressed.
