@@ -80,7 +80,7 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
         Options:
             "hover" - LSP 'textDocument/hover'. Prettier.
             "regex" - faster and simpler.
-        Default: `"hover"`
+        Default: `"regex"`
 
     • `get_package_name_implementation`
         How to get the package names.

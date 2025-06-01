@@ -93,7 +93,7 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	-- options:
 	-- "hover" - LSP 'textDocument/hover'. Prettier.
 	-- "regex" - faster and simpler.
-	get_documentation_implementation = "hover",
+	get_documentation_implementation = "regex",
 
 	-- How to get the package names.
 	-- options:
