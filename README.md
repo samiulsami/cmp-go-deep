@@ -1,6 +1,6 @@
 # cmp-go-deep
 
-A GoLang ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) / [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) / [blink.cmp](https://github.com/Saghen/blink.cmp)'s LSP source and provides completion suggestions for <b> "<i>UNIMPORTED</i> LOCAL, INTERNAL, AND VENDORED PACKAGES ONLY".</b>
+A Go ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) / [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) / [blink.cmp](https://github.com/Saghen/blink.cmp)'s LSP source and provides completion suggestions for <b> "<i>UNIMPORTED</i> LOCAL, INTERNAL, AND VENDORED PACKAGES ONLY".</b>
 
 #### Why?
 
@@ -127,4 +127,5 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 - [x] Cache results for faster completions.
 - [x] Cross-project cache sharing for internal packages
 - [x] Better memory usage
-- [ ] Remove the indirect dependency on ```cmp-nvim-lsp``` or ```blink.cmp's``` LSP source.
+- [ ] ~~Remove the indirect dependency on ```cmp-nvim-lsp``` or ```blink.cmp's``` LSP source.~~
+- [ ] Archive after [this issue](https://github.com/golang/go/issues/38528) is properly addressed
