@@ -35,17 +35,6 @@ source.new = function()
 	return setmetatable({}, { __index = source })
 end
 
----@param haystack string[]
----@param needle string
-local contains = function(haystack, needle)
-	for _, key in pairs(haystack) do
-		if key == needle then
-			return true
-		end
-	end
-	return false
-end
-
 source.is_available = function()
 	if utils.get_gopls_client() == nil then
 		return false
@@ -65,7 +54,15 @@ source.complete = function(_, params, callback)
 
 	---@type cmp_go_deep.Options
 	source.opts = vim.tbl_deep_extend("force", default_options, params.option or params.opts or {})
-	if not contains(source.opts.filetypes, vim.bo.filetype) then
+
+	local allowed_filetype = false
+	for _, key in pairs(source.opts.filetypes) do
+		if vim.bo.filetype == key then
+			allowed_filetype = true
+			break
+		end
+	end
+	if not allowed_filetype then
 		return callback({ items = {}, isIncomplete = false })
 	end
 
