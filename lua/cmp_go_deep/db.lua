@@ -98,6 +98,11 @@ function DB.setup(opts)
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_last_modified ON gosymbols (last_modified DESC);")
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_hash ON gosymbols (hash DESC);")
 
+	vim.schedule(function()
+		DB.db:eval("PRAGMA wal_checkpoint(RESTART);")
+		DB.db:eval("ANALYZE;")
+	end)
+
 	return DB
 end
 
@@ -129,10 +134,6 @@ end
 
 ---@return nil
 function DB:prune()
-	if self.total_rows_estimate < self.MAX_ROWS_THRESHOLD then
-		return
-	end
-
 	local res = self.db:eval("SELECT COUNT(*) as count FROM gosymbols")
 	if type(res) ~= "table" or #res == 0 then
 		if self.notifications then
@@ -181,10 +182,12 @@ function DB:prune()
 
 	---@param msg string
 	local rollback = function(msg)
-		self.db:eval("ROLLBACK;")
 		if self.notifications then
 			vim.notify("[sqlite] " .. msg, vim.log.levels.ERROR)
 		end
+		self.db:eval("PRAGMA wal_checkpoint(RESTART);")
+		self.db:eval("PRAGMA incremental_vacuum;")
+		self.db:eval("ROLLBACK;")
 	end
 
 	if delete_fts:step() ~= sqlite.flags["done"] then
@@ -207,11 +210,8 @@ function DB:prune()
 
 	self.total_rows_estimate = self.total_rows_estimate - to_delete
 
-	if not self.db:eval("PRAGMA incremental_vacuum(0)") then
-		if self.notifications then
-			vim.notify("[sqlite] failed to perform incremental vacuum", vim.log.levels.ERROR)
-		end
-	end
+	self.db:eval("PRAGMA wal_checkpoint(PASSIVE);")
+	self.db:eval("PRAGMA incremental_vacuum;")
 end
 
 ---@param utils cmp_go_deep.utils
@@ -248,10 +248,12 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 
 	---@param msg string
 	local rollback = function(msg)
-		self.db:eval("ROLLBACK;")
 		if self.notifications then
 			vim.notify("[sqlite] " .. msg, vim.log.levels.ERROR)
 		end
+		self.db:eval("PRAGMA wal_checkpoint(RESTART);")
+		self.db:eval("PRAGMA incremental_vacuum;")
+		self.db:eval("ROLLBACK;")
 	end
 
 	for _, symbol in ipairs(symbol_information) do
@@ -299,9 +301,11 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 
 	self.total_rows_estimate = self.total_rows_estimate + #symbol_information
 
-	vim.schedule(function()
-		self:prune()
-	end)
+	if self.total_rows_estimate > 0.8 * self.MAX_ROWS_THRESHOLD then
+		vim.schedule(function()
+			self:prune()
+		end)
+	end
 end
 
 return DB

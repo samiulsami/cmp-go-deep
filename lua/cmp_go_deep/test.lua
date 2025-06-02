@@ -43,14 +43,14 @@ local function populate()
 
 	local opts = {
 		db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
-		db_size_limit_bytes = 1024 * 1024 * 1024,
+		db_size_limit_bytes = 200 * 1024 * 1024,
 	}
 	local db = DB.setup(opts)
 
 	local total = 100000
 	for _ = 1, total / 100 do
-		local total = 100
-		local data = generate_fake_symbols(total)
+		local total2 = 100
+		local data = generate_fake_symbols(total2)
 		db:save(utils, data)
 	end
 	vim.notify("[populate] Done! Inserted " .. total .. " symbols.", vim.log.levels.INFO)
