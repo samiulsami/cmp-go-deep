@@ -321,7 +321,8 @@ function utils:process_symbols(
 
 			table.insert(items, {
 				label = package_alias .. "." .. symbol.name,
-				sortText = symbol.name,
+				filterText = package_alias .. symbol.containerName .. symbol.name,
+				sortText = package_alias .. symbol.containerName .. symbol.name,
 				kind = kind,
 				detail = '"' .. symbol.containerName .. '"',
 				data = symbol,

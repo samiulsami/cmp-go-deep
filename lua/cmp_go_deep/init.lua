@@ -22,7 +22,7 @@ local default_options = {
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 100,
-	debounce_gopls_requests_ms = 250,
+	debounce_gopls_requests_ms = 120,
 	debounce_cache_requests_ms = 50,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 	db_size_limit_bytes = 200 * 1024 * 1024,
@@ -110,11 +110,17 @@ source.complete = function(_, params, callback)
 
 		local filtered_result = {}
 		for _, symbol in ipairs(result) do
+			if symbol.name:find("%.") then
+				local new_name = symbol.name:match("^[^%.]+%.(.*)")
+				if new_name then
+					symbol.name = new_name
+				end
+			end
+
 			if
 				utils.symbol_to_completion_kind(symbol.kind)
 				and symbol.name:match("^[A-Z]")
-				and not symbol.location.uri:match("_test%.go$")
-				and (#cursor_prefix_word > 2 or symbol.name:find(cursor_prefix_word, 1, true))
+				and not symbol.location.uri:match("test%.go$")
 			then
 				if string.sub(symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix then
 					symbol.isVendored = true
@@ -128,10 +134,9 @@ source.complete = function(_, params, callback)
 		end
 
 		source.cache:save(utils, filtered_result)
-
-		local toProcess = filtered_result
-		if #cursor_prefix_word > 2 then
-			toProcess = source.cache:load(cursor_prefix_word)
+		local items = source.cache:load(cursor_prefix_word)
+		if #items == 0 then
+			items = filtered_result
 		end
 
 		utils:debounced_process_symbols(
@@ -140,7 +145,7 @@ source.complete = function(_, params, callback)
 			callback,
 			vendor_path_prefix,
 			project_path_prefix,
-			toProcess,
+			items,
 			processed_items,
 			true
 		)
