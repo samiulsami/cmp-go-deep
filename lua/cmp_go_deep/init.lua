@@ -8,8 +8,8 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil -- how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
 ---@field public exclude_vendored_packages boolean | nil -- whether to exclude vendored packages. default: false
 ---@field public documentation_wait_timeout_ms integer | nil -- maximum time (in milliseconds) to wait for fetching documentation. default: 100
----@field public debounce_gopls_requests_ms integer | nil -- time to wait before "locking-in" the current request and sending it to gopls. default: 350
----@field public debounce_cache_requests_ms integer | nil -- time to wait before "locking-in" the current request and loading data from cache. default: 50
+---@field public debounce_gopls_requests_ms integer | nil -- time to wait before "locking-in" the current request and sending it to gopls. default: 0
+---@field public debounce_cache_requests_ms integer | nil -- time to wait before "locking-in" the current request and loading data from cache. default: 0
 ---@field public db_path string | nil -- where to store the sqlite db. default: ~/.local/share/nvim/cmp_go_deep.sqlite3
 ---@field public db_size_limit_bytes number | nil -- max db size in bytes. default: 200MB
 ---@field public debug boolean | nil -- whether to enable debug logging. default: false
@@ -22,8 +22,8 @@ local default_options = {
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 100,
-	debounce_gopls_requests_ms = 120,
-	debounce_cache_requests_ms = 50,
+	debounce_gopls_requests_ms = 0,
+	debounce_cache_requests_ms = 0,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 	db_size_limit_bytes = 200 * 1024 * 1024,
 	debug = false,
@@ -70,6 +70,8 @@ source.complete = function(_, params, callback)
 	if cursor_prefix_word:match("[%.]") or cursor_prefix_word:match("[^%w_]") then
 		return callback({ items = {}, isIncomplete = false })
 	end
+
+	callback({ items = {}, isIncomplete = true })
 
 	if not source.cache then
 		source.cache = require("cmp_go_deep.db").setup(source.opts)
