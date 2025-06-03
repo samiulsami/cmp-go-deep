@@ -109,7 +109,7 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	documentation_wait_timeout_ms = 100,
 
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and sending it to gopls.
-	debounce_gopls_requests_ms = 250
+	debounce_gopls_requests_ms = 120
 
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and loading data from cache.
 	debounce_cache_requests_ms = 50
@@ -127,6 +127,5 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 - [x] Cache results for faster completions.
 - [x] Cross-project cache sharing for internal packages.
 - [x] Better memory usage.
-- [ ] ~~Remove the indirect dependency on ```cmp-nvim-lsp``` or ```blink.cmp's``` LSP source.~~
-- [ ] Don't ignore package names while matching symbols.
+- [x] Don't ignore package names while matching symbols.
 - [ ] Archive after [this issue](https://github.com/golang/go/issues/38528) is properly addressed.
