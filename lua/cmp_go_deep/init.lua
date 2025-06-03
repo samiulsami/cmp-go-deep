@@ -110,13 +110,7 @@ source.complete = function(_, params, callback)
 
 		local filtered_result = {}
 		for _, symbol in ipairs(result) do
-			if symbol.name:find("%.") then
-				local new_name = symbol.name:match("^[^%.]+%.(.*)")
-				if new_name then
-					symbol.name = new_name
-				end
-			end
-
+			symbol.name = symbol.name:match("^[^%.]+%.(.*)") or symbol.name
 			if
 				utils.symbol_to_completion_kind(symbol.kind)
 				and symbol.name:match("^[A-Z]")
