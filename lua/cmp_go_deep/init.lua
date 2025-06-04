@@ -3,6 +3,7 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 
 ---@class cmp_go_deep.Options
 ---@field public notifications boolean | nil -- whether to show notifications. default: true
+---@field public matching_strategy "substring" | "fuzzy" | "substringFuzzyFallback" | nil -- how to match symbols. default: "substringFuzzyFallback"
 ---@field public filetypes string[] | nil -- filetypes to enable the source for
 ---@field public get_documentation_implementation "hover" | "regex" | nil -- how to get documentation. default: "regex"
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil -- how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
@@ -17,6 +18,7 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 ---@type cmp_go_deep.Options
 local default_options = {
 	notifications = true,
+	matching_strategy = "substringFuzzyFallback",
 	filetypes = { "go" },
 	get_documentation_implementation = "regex",
 	get_package_name_implementation = "regex",
@@ -71,6 +73,7 @@ source.complete = function(_, params, callback)
 		return callback({ items = {}, isIncomplete = false })
 	end
 
+	-- FIXME: Debounce doesn't work unless we make this callback here
 	callback({ items = {}, isIncomplete = true })
 
 	if not source.cache then
@@ -94,13 +97,28 @@ source.complete = function(_, params, callback)
 	local vendor_path_prefix = "file://" .. project_path .. "/vendor/"
 	local project_path_prefix = "file://" .. project_path .. "/"
 
+	local cached_items = {}
+	if source.opts.matching_strategy == "substringFuzzyFallback" or source.opts.matching_strategy == "substring" then
+		cached_items = source.cache:load(cursor_prefix_word, true)
+	end
+
+	if source.opts.matching_strategy == "substringFuzzyFallback" or source.opts.matching_strategy == "fuzzy" then
+		local iter = 3
+		local tmp_cursor_prefix_word = cursor_prefix_word
+		while #cached_items == 0 and iter > 0 and #tmp_cursor_prefix_word > 0 do
+			cached_items = source.cache:load(tmp_cursor_prefix_word, false)
+			iter = iter - 1
+			tmp_cursor_prefix_word = tmp_cursor_prefix_word:sub(1, #tmp_cursor_prefix_word - 1)
+		end
+	end
+
 	utils:debounced_process_symbols(
 		source.opts,
 		bufnr,
 		callback,
 		vendor_path_prefix,
 		project_path_prefix,
-		source.cache:load(cursor_prefix_word),
+		cached_items,
 		processed_items,
 		true
 	)
@@ -115,6 +133,7 @@ source.complete = function(_, params, callback)
 			symbol.name = symbol.name:match("^[^%.]+%.(.*)") or symbol.name
 			if
 				utils.symbol_to_completion_kind(symbol.kind)
+				and not symbol.name:match("/")
 				and symbol.name:match("^[A-Z]")
 				and not symbol.location.uri:match("test%.go$")
 			then
@@ -125,13 +144,24 @@ source.complete = function(_, params, callback)
 					symbol.isLocal = true
 					symbol.location.uri = symbol.location.uri:sub(#project_path_prefix + 1)
 				end
+				symbol.fuzzy_text = cursor_prefix_word
 				table.insert(filtered_result, symbol)
 			end
 		end
 
 		source.cache:save(utils, filtered_result)
-		local items = source.cache:load(cursor_prefix_word)
-		if #items == 0 then
+		local items = {}
+		if
+			source.opts.matching_strategy == "substringFuzzyFallback"
+			or source.opts.matching_strategy == "substring"
+		then
+			items = source.cache:load(cursor_prefix_word, true)
+		end
+
+		if
+			#items == 0 and source.opts.matching_strategy == "substringFuzzyFallback"
+			or source.opts.matching_strategy == "fuzzy"
+		then
 			items = filtered_result
 		end
 
@@ -158,7 +188,7 @@ function source:resolve(completion_item, callback)
 	end
 
 	---@type cmp_go_deep.Options|nil
-	local opts = symbol.opts
+	local opts = source.opts
 	if not opts then
 		vim.notify("Warning: symbol data is missing options", vim.log.levels.WARN)
 		return callback(completion_item)
@@ -204,7 +234,7 @@ function source:execute(completion_item, callback)
 	end
 
 	---@type cmp_go_deep.Options|nil
-	local opts = symbol.opts
+	local opts = source.opts
 	if not opts then
 		return
 	end

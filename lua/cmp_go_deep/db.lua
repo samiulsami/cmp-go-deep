@@ -5,8 +5,15 @@ local math = require("math")
 
 ---@class cmp_go_deep.DB
 ---@field public setup fun(opts: cmp_go_deep.Options): cmp_go_deep.DB?
----@field public load fun(self, query_string: string): table
+---@field public load fun(self, query_string: string, match_name: boolean?): table
 ---@field public save fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
+---@field private load_by_name_stmt sqlstmt
+---@field private load_by_fuzzy_text_stmt sqlstmt
+---@field private insert_gosymbols_stmt sqlstmt
+---@field private insert_gosymbols_fts_stmt sqlstmt
+---@field private last_insert_rowid_stmt sqlstmt
+---@field private delete_fts_stmt sqlstmt
+---@field private delete_gosymbols_stmt sqlstmt
 ---@field private db sqlite_db
 ---@field private db_path string
 ---@field private max_db_size_bytes number
@@ -14,7 +21,7 @@ local math = require("math")
 ---@field private notifications boolean
 ---@field private MAX_ROWS_THRESHOLD number
 local DB = {}
-local SCHEMA_VERSION = "0.0.6"
+local SCHEMA_VERSION = "0.0.7"
 
 ---@param opts cmp_go_deep.Options
 ---@return cmp_go_deep.DB?
@@ -54,6 +61,8 @@ function DB.setup(opts)
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbol_cache")
+		DB.db:eval("VACUUM;")
+		DB.db:eval("PRAGMA wal_checkpoint(TRUNCATE);")
 	end
 
 	local tables = {
@@ -61,7 +70,6 @@ function DB.setup(opts)
 		    CREATE TABLE IF NOT EXISTS gosymbols (
 		      id INTEGER PRIMARY KEY AUTOINCREMENT,
 		      hash TEXT UNIQUE NOT NULL,
-		      name TEXT NOT NULL,
 		      data TEXT NOT NULL,
 		      last_modified INTEGER NOT NULL
 		    );
@@ -69,7 +77,7 @@ function DB.setup(opts)
 
 		[[
 		    CREATE VIRTUAL TABLE IF NOT EXISTS gosymbols_fts
-		    USING fts5(name, id UNINDEXED, tokenize='trigram', detail='none');
+		    USING fts5(name, fuzzy_text, id, tokenize='porter trigram');
 		]],
 	}
 
@@ -103,31 +111,89 @@ function DB.setup(opts)
 		DB.db:eval("ANALYZE;")
 	end)
 
-	return DB
-end
+	DB.load_by_fuzzy_text_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+			SELECT gosymbols.data FROM gosymbols
+			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
+			WHERE gosymbols_fts.fuzzy_text LIKE '%' || ? || '%'
+			ORDER BY gosymbols.last_modified DESC
+			LIMIT 100;
+	]]
+	)
 
----@param query_string string
----@return table
-function DB:load(query_string)
-	local res = self.db:eval(
+	DB.load_by_name_stmt = sqlstmt:parse(
+		DB.db.conn,
 		[[
 			SELECT gosymbols.data FROM gosymbols
 			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
 			WHERE gosymbols_fts.name LIKE '%' || ? || '%'
 			ORDER BY gosymbols.last_modified DESC
-			LIMIT 200;
-		]],
-		{ query_string }
+			LIMIT 100;
+	]]
 	)
 
-	if type(res) ~= "table" or #res == 0 then
-		return {}
+	DB.insert_gosymbols_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+		    INSERT OR REPLACE INTO gosymbols (data, hash, last_modified)
+		    VALUES (?, ?, ?);
+		]]
+	)
+
+	DB.last_insert_rowid_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+		    SELECT last_insert_rowid();
+		]]
+	)
+
+	DB.insert_gosymbols_fts_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+		    INSERT OR REPLACE INTO gosymbols_fts (name, fuzzy_text, id)
+		    VALUES (?, ?, ?);
+		]]
+	)
+
+	DB.delete_gosymbols_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+		    DELETE FROM gosymbols
+		    WHERE id IN (
+			    SELECT id FROM gosymbols ORDER BY last_modified ASC LIMIT ?
+		    );
+		]]
+	)
+
+	DB.delete_fts_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+		    DELETE FROM gosymbols_fts
+		    WHERE id IN (
+			    SELECT id FROM gosymbols ORDER BY last_modified ASC LIMIT ?
+		    );
+		]]
+	)
+
+	return DB
+end
+
+---@param query_string string
+---@param match_name boolean?
+---@return table
+function DB:load(query_string, match_name)
+	local stmt = self.load_by_fuzzy_text_stmt
+	if match_name then
+		stmt = self.load_by_name_stmt
 	end
+	stmt:bind({ query_string })
 
 	local ret = {}
-	for _, row in ipairs(res) do
-		ret[#ret + 1] = vim.json.decode(row.data)
-	end
+	stmt:kvrows(function(kv)
+		ret[#ret + 1] = vim.json.decode(kv.data)
+	end)
+	stmt:reset()
 
 	return ret
 end
@@ -146,32 +212,12 @@ function DB:prune()
 	local to_delete = math.floor(self.total_rows_estimate * 0.2)
 	to_delete = math.min(to_delete, 5000)
 
-	if to_delete == 0 then
+	if to_delete <= 0 then
 		return
 	end
 
-	local delete_fts = sqlstmt:parse(
-		self.db.conn,
-		[[
-		  DELETE FROM gosymbols_fts
-		  WHERE id IN (
-		    SELECT id FROM gosymbols ORDER BY last_modified ASC LIMIT ?
-		  );
-		]]
-	)
-
-	local delete_gosymbols = sqlstmt:parse(
-		self.db.conn,
-		[[
-		  DELETE FROM gosymbols
-		  WHERE id IN (
-		    SELECT id FROM gosymbols ORDER BY last_modified ASC LIMIT ?
-		  );
-		]]
-	)
-
-	delete_gosymbols:bind({ to_delete })
-	delete_fts:bind({ to_delete })
+	self.delete_gosymbols_stmt:bind({ to_delete })
+	self.delete_fts_stmt:bind({ to_delete })
 
 	if not self.db:eval("BEGIN TRANSACTION;") then
 		if self.notifications then
@@ -190,18 +236,18 @@ function DB:prune()
 		self.db:eval("ROLLBACK;")
 	end
 
-	if delete_fts:step() ~= sqlite.flags["done"] then
+	if self.delete_fts_stmt:step() ~= sqlite.flags["done"] then
 		return rollback("failed to perform deletion of gosymbols_fts")
 	end
-	if not delete_fts:finalize() then
-		return rollback("failed to finalize deletion of gosymbols_fts")
+	if not self.delete_fts_stmt:reset() then
+		return rollback("failed to reset delete gosymbols_fts")
 	end
 
-	if delete_gosymbols:step() ~= sqlite.flags["done"] then
+	if self.delete_gosymbols_stmt:step() ~= sqlite.flags["done"] then
 		return rollback("failed to perform deletion of gosymbols")
 	end
-	if not delete_gosymbols:finalize() then
-		return rollback("failed to finalize deletion of gosymbols")
+	if not self.delete_gosymbols_stmt:reset() then
+		return rollback("failed to reset delete gosymbols")
 	end
 
 	if not self.db:eval("END TRANSACTION;") then
@@ -217,27 +263,6 @@ end
 ---@param utils cmp_go_deep.utils
 ---@param symbol_information table
 function DB:save(utils, symbol_information) --- assumes that gopls doesn't return more than 100 workspace symbols
-	local insert_gosymbols = sqlstmt:parse(
-		self.db.conn,
-		[[
-		    INSERT OR REPLACE INTO gosymbols (name, data, hash, last_modified)
-		    VALUES (?, ?, ?, ?);
-		]]
-	)
-	local last_insert_rowid_stmt = sqlstmt:parse(
-		self.db.conn,
-		[[
-		    SELECT last_insert_rowid();
-		]]
-	)
-	local insert_gosymbols_fts = sqlstmt:parse(
-		self.db.conn,
-		[[
-		    INSERT OR REPLACE INTO gosymbols_fts (name, id )
-		    VALUES (?, ?);
-		]]
-	)
-
 	local last_modified = os.time()
 	if not self.db:eval("BEGIN TRANSACTION;") then
 		if self.notifications then
@@ -260,39 +285,29 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 		local encoded = vim.json.encode(symbol)
 		local hash = utils.deterministic_symbol_hash(symbol)
 
-		insert_gosymbols:bind({ symbol.name, encoded, hash, last_modified })
-		if insert_gosymbols:step() ~= sqlite.flags["done"] then
+		self.insert_gosymbols_stmt:bind({ encoded, hash, last_modified })
+		if self.insert_gosymbols_stmt:step() ~= sqlite.flags["done"] then
 			return rollback("failed to insert gosymbols row")
 		end
-		if insert_gosymbols:reset() ~= sqlite.flags["ok"] then
+		if self.insert_gosymbols_stmt:reset() ~= sqlite.flags["ok"] then
 			return rollback("failed to reset insert_gosymbols")
 		end
 
-		if last_insert_rowid_stmt:step() ~= sqlite.flags["row"] then
+		if self.last_insert_rowid_stmt:step() ~= sqlite.flags["row"] then
 			return rollback("failed to select id")
 		end
-		local id = last_insert_rowid_stmt:val(0)
-		if last_insert_rowid_stmt:reset() ~= sqlite.flags["ok"] then
+		local id = self.last_insert_rowid_stmt:val(0)
+		if self.last_insert_rowid_stmt:reset() ~= sqlite.flags["ok"] then
 			return rollback("failed to reset last_insert_rowid_stmt")
 		end
 
-		insert_gosymbols_fts:bind({ symbol.name, id })
-		if insert_gosymbols_fts:step() ~= sqlite.flags["done"] then
+		self.insert_gosymbols_fts_stmt:bind({ symbol.name, (symbol.fuzzy_text or "") .. symbol.name, id })
+		if self.insert_gosymbols_fts_stmt:step() ~= sqlite.flags["done"] then
 			return rollback("failed to insert gosymbols_fts row")
 		end
-		if insert_gosymbols_fts:reset() ~= sqlite.flags["ok"] then
+		if self.insert_gosymbols_fts_stmt:reset() ~= sqlite.flags["ok"] then
 			return rollback("failed to reset insert_gosymbols_fts")
 		end
-	end
-
-	if not insert_gosymbols:finalize() then
-		return rollback("failed to finalize insert_gosymbols")
-	end
-	if not last_insert_rowid_stmt:finalize() then
-		return rollback("failed to finalize last_insert_rowid_stmt")
-	end
-	if not insert_gosymbols_fts:finalize() then
-		return rollback("failed to finalize insert_gosymbols_fts")
 	end
 
 	if not self.db:eval("END TRANSACTION;") then

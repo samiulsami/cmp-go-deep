@@ -71,6 +71,14 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
         Enable/disable notifications.
         Default: `true`
 
+    • `matching_strategy`
+        Symbol matching strategy.
+        Options:
+            "substring" - exact match on symbol name substrings.
+            "fuzzy" - fuzzy match on package/container/symbol names.
+            "substringFuzzyFallback" - try "substring" match, then fallback to "fuzzy".
+        Default: `"substringFuzzyFallback"`
+
     • `filetypes`
         Filetypes to enable the source for.
         Default: `{"go"}`

@@ -27,7 +27,7 @@ local symbol_to_completion_kind = {
 	[26] = completionItemKind.TypeParameter,
 }
 
----@param fn fun( ...)
+---@param fn fun(...)
 ---@param delay_ms integer
 ---@return fun(...)
 utils.debounce = function(fn, delay_ms)
@@ -317,7 +317,6 @@ function utils:process_symbols(
 			end
 
 			symbol.bufnr = bufnr
-			symbol.opts = opts
 
 			table.insert(items, {
 				label = package_alias .. "." .. symbol.name,

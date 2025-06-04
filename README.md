@@ -86,6 +86,13 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	-- Enable/disable notifications.
 	notifications = true,
 
+	-- Symbol matching strategy.
+	-- options:
+	-- "substring" - exact match on symbol name substrings.
+	-- "fuzzy" - fuzzy match on package/container/symbol names.
+	-- "substringFuzzyFallback" - try "substring" match, then fallback to "fuzzy".
+	matching_strategy =  "substringFuzzyFallback",
+
 	-- Filetypes to enable the source for.
 	filetypes = { "go" },
 
