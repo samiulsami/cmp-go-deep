@@ -3,7 +3,7 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 
 ---@class cmp_go_deep.Options
 ---@field public notifications boolean | nil -- whether to show notifications. default: true
----@field public matching_strategy "substring" | "fuzzy" | "substringFuzzyFallback" | nil -- how to match symbols. default: "substringFuzzyFallback"
+---@field public matching_strategy "substring" | "fuzzy" | "substring_fuzzy_fallback" | nil -- how to match symbols. default: "substring_fuzzy_fallback"
 ---@field public filetypes string[] | nil -- filetypes to enable the source for
 ---@field public get_documentation_implementation "hover" | "regex" | nil -- how to get documentation. default: "regex"
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil -- how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
@@ -18,7 +18,7 @@ local gopls_requests = require("cmp_go_deep.gopls_requests")
 ---@type cmp_go_deep.Options
 local default_options = {
 	notifications = true,
-	matching_strategy = "substringFuzzyFallback",
+	matching_strategy = "substring_fuzzy_fallback",
 	filetypes = { "go" },
 	get_documentation_implementation = "regex",
 	get_package_name_implementation = "regex",
@@ -98,11 +98,11 @@ source.complete = function(_, params, callback)
 	local project_path_prefix = "file://" .. project_path .. "/"
 
 	local cached_items = {}
-	if source.opts.matching_strategy == "substringFuzzyFallback" or source.opts.matching_strategy == "substring" then
+	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "substring" then
 		cached_items = source.cache:load(cursor_prefix_word, true)
 	end
 
-	if source.opts.matching_strategy == "substringFuzzyFallback" or source.opts.matching_strategy == "fuzzy" then
+	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
 		local iter = 3
 		local tmp_cursor_prefix_word = cursor_prefix_word
 		while #cached_items == 0 and iter > 0 and #tmp_cursor_prefix_word > 0 do
@@ -152,14 +152,14 @@ source.complete = function(_, params, callback)
 		source.cache:save(utils, filtered_result)
 		local items = {}
 		if
-			source.opts.matching_strategy == "substringFuzzyFallback"
+			source.opts.matching_strategy == "substring_fuzzy_fallback"
 			or source.opts.matching_strategy == "substring"
 		then
 			items = source.cache:load(cursor_prefix_word, true)
 		end
 
 		if
-			#items == 0 and source.opts.matching_strategy == "substringFuzzyFallback"
+			#items == 0 and source.opts.matching_strategy == "substring_fuzzy_fallback"
 			or source.opts.matching_strategy == "fuzzy"
 		then
 			items = filtered_result
