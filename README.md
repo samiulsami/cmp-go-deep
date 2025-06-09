@@ -4,7 +4,7 @@ A Go ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim
 
 #### Why?
 
-At the time of writing, the GoLang Language Server (```gopls@v0.18.1```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
+At the time of writing, the Go Language Server (```gopls@v0.18.1```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
 
 
 #### How?
