@@ -12,6 +12,9 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_imported_paths fun(opts: cmp_go_deep.Options, bufnr: integer): table<string, string>bufnr: integer): table<string, string>
 ---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
+---@field sanitize_raw_symbol fun(self,symbol: lsp.SymbolInformation): lsp.SymbolInformation
+---@field get_go_root fun(): string, string|nil
+---@field get_go_version fun(): string, string|nil
 ---@field deterministic_symbol_hash fun(symbol: lsp.SymbolInformation): string
 ---@field process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, callback: any, vendor_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>, isIncomplete: boolean): nil
 ---@field debounced_process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, callback: any, vendor_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>, isIncomplete: boolean): nil
@@ -222,6 +225,58 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 	file:close()
 	package_name_cache[uri] = ""
 	return nil, true
+end
+
+---@param symbol lsp.SymbolInformation
+---@return lsp.SymbolInformation|nil
+function utils:sanitize_raw_symbol(symbol)
+	symbol.name = symbol.name:match("^[^%.]+%.(.*)") or symbol.name
+	if
+		self.symbol_to_completion_kind(symbol.kind)
+		and not symbol.name:match("/")
+		and symbol.name:match("^[A-Z]")
+		and not symbol.location.uri:match("test%.go$")
+	then
+		return symbol
+	end
+
+	return nil
+end
+
+--- result, error
+---@return string, string|nil
+function utils.get_go_root()
+	local handle = io.popen("go env GOROOT")
+	if not handle then
+		return "", "failed to get GOROOT"
+	end
+
+	local goroot = handle:read("*a"):gsub("%s+", "")
+	if not goroot then
+		handle:close()
+		return "", "error parsing GOROOT string"
+	end
+	handle:close()
+
+	return goroot, nil
+end
+
+--- result, error
+---@return string, string|nil
+function utils.get_go_version()
+	local handle = io.popen("go env GOVERSION")
+	if not handle then
+		return "", "failed to get go_version"
+	end
+
+	local go_version = handle:read("*a"):gsub("%s+", "")
+	if not go_version then
+		handle:close()
+		return "", "error parsing go_version string"
+	end
+	handle:close()
+
+	return go_version, nil
 end
 
 ---@param symbol lsp.SymbolInformation

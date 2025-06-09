@@ -54,6 +54,8 @@ source.complete = function(_, params, callback)
 		return callback({ items = {}, isIncomplete = false })
 	end
 
+	require("cmp_go_deep.loader")
+
 	---@type cmp_go_deep.Options
 	source.opts = vim.tbl_deep_extend("force", default_options, params.option or params.opts or {})
 
@@ -130,22 +132,17 @@ source.complete = function(_, params, callback)
 
 		local filtered_result = {}
 		for _, symbol in ipairs(result) do
-			symbol.name = symbol.name:match("^[^%.]+%.(.*)") or symbol.name
-			if
-				utils.symbol_to_completion_kind(symbol.kind)
-				and not symbol.name:match("/")
-				and symbol.name:match("^[A-Z]")
-				and not symbol.location.uri:match("test%.go$")
-			then
-				if string.sub(symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix then
-					symbol.isVendored = true
-					symbol.location.uri = symbol.location.uri:sub(#vendor_path_prefix + 1)
-				elseif string.sub(symbol.location.uri, 1, #project_path_prefix) == project_path_prefix then
-					symbol.isLocal = true
-					symbol.location.uri = symbol.location.uri:sub(#project_path_prefix + 1)
+			local sanitized_symbol = utils:sanitize_raw_symbol(symbol)
+			if sanitized_symbol then
+				if string.sub(sanitized_symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix then
+					sanitized_symbol.isVendored = true
+					sanitized_symbol.location.uri = sanitized_symbol.location.uri:sub(#vendor_path_prefix + 1)
+				elseif string.sub(sanitized_symbol.location.uri, 1, #project_path_prefix) == project_path_prefix then
+					sanitized_symbol.isLocal = true
+					sanitized_symbol.location.uri = sanitized_symbol.location.uri:sub(#project_path_prefix + 1)
 				end
-				symbol.fuzzy_text = cursor_prefix_word
-				table.insert(filtered_result, symbol)
+				sanitized_symbol.fuzzy_text = cursor_prefix_word
+				table.insert(filtered_result, sanitized_symbol)
 			end
 		end
 
