@@ -50,19 +50,25 @@ function DB.setup(opts)
 
 	DB.db:eval([[
 		    CREATE TABLE IF NOT EXISTS meta (
-			version TEXT PRIMARY KEY
+			schema_version TEXT PRIMARY KEY
+			go_version TEXT NOT NULL
 	  	    );
 		]])
 
-	local res = DB.db:eval("SELECT version FROM meta;")
-	if type(res) ~= "table" or #res == 0 or res[1].version ~= SCHEMA_VERSION then
+	local res = DB.db:eval("SELECT schema_version, go_version FROM meta;")
+	if
+		type(res) ~= "table"
+		or #res == 0
+		or res[1].schema_version ~= SCHEMA_VERSION
+		or res[1].go_version ~= cur_go_version
+	then
 		DB.db:eval("DELETE FROM meta")
 		DB.db:eval("INSERT INTO meta (version) VALUES ('" .. SCHEMA_VERSION .. "')")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbol_cache")
-		DB.db:eval("VACUUM;")
 		DB.db:eval("PRAGMA wal_checkpoint(TRUNCATE);")
+		DB.db:eval("VACUUM;")
 	end
 
 	local tables = {
