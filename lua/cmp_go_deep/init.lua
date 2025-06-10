@@ -1,5 +1,5 @@
 local utils = require("cmp_go_deep.utils")
-local gopls_requests = require("cmp_go_deep.gopls_utils")
+local gopls_utils = require("cmp_go_deep.gopls_utils")
 
 ---@class cmp_go_deep.Options
 ---@field public notifications boolean | nil -- whether to show notifications. default: true
@@ -38,7 +38,7 @@ source.new = function()
 end
 
 source.is_available = function()
-	if utils.get_gopls_client() == nil then
+	if gopls_utils.get_gopls_client() == nil then
 		return false
 	end
 	return true
@@ -49,12 +49,10 @@ source.get_trigger_characters = function()
 end
 
 source.complete = function(_, params, callback)
-	local gopls_client = utils.get_gopls_client()
+	local gopls_client = gopls_utils.get_gopls_client()
 	if not gopls_client then
 		return callback({ items = {}, isIncomplete = false })
 	end
-
-	require("cmp_go_deep.loader")
 
 	---@type cmp_go_deep.Options
 	source.opts = vim.tbl_deep_extend("force", default_options, params.option or params.opts or {})
@@ -79,12 +77,13 @@ source.complete = function(_, params, callback)
 	callback({ items = {}, isIncomplete = true })
 
 	if not source.cache then
-		source.cache = require("cmp_go_deep.db").setup(source.opts)
+		source.cache = require("cmp_go_deep.cache").setup(source.opts)
+		gopls_utils:load_internal_symbols_into_cache(source.opts, gopls_client, utils, source.cache)
 	end
 
-	if not gopls_requests.debounced_workspace_symbols then
-		gopls_requests.debounced_workspace_symbols =
-			utils.debounce(gopls_requests.workspace_symbols, source.opts.debounce_gopls_requests_ms)
+	if not gopls_utils.debounced_workspace_symbols then
+		gopls_utils.debounced_workspace_symbols =
+			utils.debounce(gopls_utils.workspace_symbols, source.opts.debounce_gopls_requests_ms)
 	end
 
 	if not utils.debounced_process_symbols then
@@ -125,7 +124,7 @@ source.complete = function(_, params, callback)
 		true
 	)
 
-	gopls_requests.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
+	gopls_utils.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
 		if not result or #result == 0 then
 			return callback({ items = {}, isIncomplete = false })
 		end
@@ -160,6 +159,7 @@ source.complete = function(_, params, callback)
 			or source.opts.matching_strategy == "fuzzy"
 		then
 			items = filtered_result
+			---TODO: fuzzy match internal internal packages (cache.load_internal_symbols_from_memory)
 		end
 
 		utils:debounced_process_symbols(

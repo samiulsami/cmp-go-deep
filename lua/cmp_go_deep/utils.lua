@@ -7,7 +7,6 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field symbol_to_completion_kind fun(lspKind: lsp.SymbolKind): integer
 ---@field get_cursor_prefix_word fun(win_id: integer): string
 ---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, package_alias: string): string
----@field get_gopls_client fun(): vim.lsp.Client|nil
 ---@field get_documentation fun(opts: cmp_go_deep.Options, uri: string, range: lsp.Range): string|nil
 ---@field get_imported_paths fun(opts: cmp_go_deep.Options, bufnr: integer): table<string, string>bufnr: integer): table<string, string>
 ---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
@@ -75,22 +74,13 @@ utils.get_cursor_prefix_word = function(win_id)
 	return line:sub(start_col, end_col)
 end
 
----@return vim.lsp.Client | nil
-utils.get_gopls_client = function()
-	local gopls_clients = vim.lsp.get_clients({ name = "gopls" })
-	if #gopls_clients > 0 then
-		return gopls_clients[1]
-	end
-	return nil
-end
-
 ---@param opts cmp_go_deep.Options
 ---@param uri string
 ---@param range lsp.Range
 ---@return string | nil
 utils.get_documentation = function(opts, uri, range)
 	if opts.get_documentation_implementation == "hover" then
-		return gopls_utils.get_documentation(opts, utils.get_gopls_client(), uri, range)
+		return gopls_utils.get_documentation(opts, gopls_utils.get_gopls_client(), uri, range)
 	end
 
 	--default to regex

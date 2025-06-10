@@ -1,8 +1,20 @@
 ---@class cmp_go_deep.gopls_utils
+---@field get_gopls_client fun(): vim.lsp.Client | nil
 ---@field get_documentation fun(opts: cmp_go_deep.Options, gopls_client: vim.lsp.Client | nil, uri: string, range: lsp.Range): string|nil
 ---@field debounced_workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
 ---@field public workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
+---@field public scan_gosymbols_in_dir fun(dir: string, callback: fun(files: string[]): nil): nil
+---@field public load_internal_symbols_into_cache fun(self, opts: cmp_go_deep.Options, gopls_client: vim.lsp.Client | nil, utils: cmp_go_deep.utils, cache: cmp_go_deep.cache): nil
 local gopls_utils = {}
+
+---@return vim.lsp.Client | nil
+gopls_utils.get_gopls_client = function()
+	local gopls_clients = vim.lsp.get_clients({ name = "gopls" })
+	if #gopls_clients > 0 then
+		return gopls_clients[1]
+	end
+	return nil
+end
 
 ---@param opts cmp_go_deep.Options
 ---@param gopls_client vim.lsp.Client | nil
@@ -122,12 +134,14 @@ gopls_utils.scan_gosymbols_in_dir = function(dir, callback)
 end
 
 ---@param opts cmp_go_deep.Options
+---@param gopls_client vim.lsp.Client | nil
 ---@param utils cmp_go_deep.utils
 ---@param cache cmp_go_deep.cache
-gopls_utils.load_internal_symbols_into_cache = function(opts, utils, cache)
-	local gopls_client = require("cmp_go_deep.utils").get_gopls_client()
+function gopls_utils:load_internal_symbols_into_cache(opts, gopls_client, utils, cache)
 	if gopls_client == nil then
-		vim.notify("gopls client is nil", vim.log.levels.ERROR)
+		if opts.notifications then
+			vim.notify("gopls client is nil", vim.log.levels.WARN)
+		end
 		return
 	end
 
@@ -141,7 +155,7 @@ gopls_utils.load_internal_symbols_into_cache = function(opts, utils, cache)
 
 	local src_dir = go_root .. "/src/"
 
-	scan_gopath_src_dir(src_dir, function(files)
+	self.scan_gosymbols_in_dir(src_dir, function(files)
 		vim.schedule(function()
 			vim.notify("Symbols found: " .. #files)
 
@@ -177,7 +191,7 @@ gopls_utils.load_internal_symbols_into_cache = function(opts, utils, cache)
 					end
 
 					cache:save(utils, result)
-					cache:save_in_memory(result)
+					cache:save_internal_symbols_in_memory(result)
 				end)
 			end
 		end)

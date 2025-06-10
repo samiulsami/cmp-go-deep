@@ -7,7 +7,8 @@ local math = require("math")
 ---@field public setup fun(opts: cmp_go_deep.Options): cmp_go_deep.cache?
 ---@field public load fun(self, query_string: string, match_name: boolean?): table
 ---@field public save fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
----@field public save_in_memory fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
+---@field public save_internal_symbols_in_memory fun(self, symbol_information: table): nil
+---@field public load_internal_symbols_from_memory fun(self): table | nil
 ---@field private load_by_name_stmt sqlstmt
 ---@field private load_by_fuzzy_text_stmt sqlstmt
 ---@field private insert_gosymbols_stmt sqlstmt
@@ -21,6 +22,7 @@ local math = require("math")
 ---@field private total_rows_estimate number -- pessimistic overestimation
 ---@field private notifications boolean
 ---@field private MAX_ROWS_THRESHOLD number
+---@field private internal_symbols table | nil
 local cache = {}
 local SCHEMA_VERSION = "0.0.8"
 
@@ -325,8 +327,13 @@ function cache:save(utils, symbol_information) --- assumes that gopls doesn't re
 end
 
 ---@param symbol_information table
-function cache:save_in_memory(symbol_information)
-	cache.data = vim.tbl_extend("force", cache.data, symbol_information)
+function cache:save_internal_symbols_in_memory(symbol_information)
+	cache.internal_symbols = vim.tbl_extend("force", cache.internal_symbols or {}, symbol_information)
+end
+
+---@return table
+function cache:load_internal_symbols_from_memory()
+	return cache.internal_symbols
 end
 
 return cache
