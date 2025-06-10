@@ -1,6 +1,6 @@
 --TODO: add this to ci
 
-local DB = require("cmp_go_deep.db")
+local DB = require("cmp_go_deep.cache")
 local utils = require("cmp_go_deep.utils")
 local math = math
 local os = os

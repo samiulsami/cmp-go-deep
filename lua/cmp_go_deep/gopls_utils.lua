@@ -1,8 +1,8 @@
----@class cmp_go_deep.gopls_requests
+---@class cmp_go_deep.gopls_utils
 ---@field get_documentation fun(opts: cmp_go_deep.Options, gopls_client: vim.lsp.Client | nil, uri: string, range: lsp.Range): string|nil
 ---@field debounced_workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
 ---@field public workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
-local gopls_requests = {}
+local gopls_utils = {}
 
 ---@param opts cmp_go_deep.Options
 ---@param gopls_client vim.lsp.Client | nil
@@ -10,7 +10,7 @@ local gopls_requests = {}
 ---@param range lsp.Range
 ---@return string | nil
 ---TODO: try completionItem/resolve instead
-gopls_requests.get_documentation = function(opts, gopls_client, uri, range)
+gopls_utils.get_documentation = function(opts, gopls_client, uri, range)
 	if gopls_client == nil then
 		if opts.notifications then
 			vim.notify("gopls client is nil", vim.log.levels.WARN)
@@ -57,8 +57,14 @@ end
 ---@param cursor_prefix_word string
 ---@param callback fun(items: lsp.SymbolInformation[]): nil
 -- stylua: ignore
-gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, cursor_prefix_word, callback)
-	local success, _ = gopls_client:request("workspace/symbol", { query = cursor_prefix_word }, function(_, result)
+gopls_utils.workspace_symbols = function(opts, gopls_client, bufnr, cursor_prefix_word, callback)
+	local success, _ = gopls_client:request("workspace/symbol", { query = cursor_prefix_word }, function(err, result)
+		if err then
+			if opts.notifications then
+				vim.notify("failed to get workspace symbols: " .. vim.inspect(err), vim.log.levels.WARN)
+			end
+			return
+		end
 		if not result then
 			return
 		end
@@ -73,4 +79,109 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, cursor_pr
 	end
 end
 
-return gopls_requests
+--- @param dir string
+--- @param callback fun(files: table<string, string>): nil
+gopls_utils.scan_gosymbols_in_dir = function(dir, callback)
+	local files = {}
+	local pending = 0
+
+	--FIXME: don't use recursion
+	local function scan_dir(path)
+		pending = pending + 1
+
+		vim.uv.fs_scandir(path, function(err, handle)
+			if err then
+				pending = pending - 1
+				if pending == 0 then
+					callback(files)
+				end
+				return
+			end
+
+			while true do
+				local name, type = vim.uv.fs_scandir_next(handle)
+				if not name then
+					break
+				end
+
+				if type == "file" and string.match(name, "%.go$") then
+					table.insert(files, path .. "/" .. name)
+				elseif type == "directory" then
+					scan_dir(path .. name)
+				end
+			end
+
+			pending = pending - 1
+			if pending == 0 then
+				callback(files)
+			end
+		end)
+	end
+
+	scan_dir(dir)
+end
+
+---@param opts cmp_go_deep.Options
+---@param utils cmp_go_deep.utils
+---@param cache cmp_go_deep.cache
+gopls_utils.load_internal_symbols_into_cache = function(opts, utils, cache)
+	local gopls_client = require("cmp_go_deep.utils").get_gopls_client()
+	if gopls_client == nil then
+		vim.notify("gopls client is nil", vim.log.levels.ERROR)
+		return
+	end
+
+	local go_root, err = utils:get_go_root()
+	if err then
+		if opts.notifications then
+			vim.notify("failed to get go_root: " .. err, vim.log.levels.ERROR)
+		end
+		return
+	end
+
+	local src_dir = go_root .. "/src/"
+
+	scan_gopath_src_dir(src_dir, function(files)
+		vim.schedule(function()
+			vim.notify("Symbols found: " .. #files)
+
+			for _, file in ipairs(files) do
+				local uri = "file://" .. file
+
+				gopls_client:request("textDocument/documentSymbol", {
+					textDocument = {
+						uri = uri,
+					},
+				}, function(gopls_err, result)
+					if gopls_err then
+						if opts.notifications then
+							vim.notify(
+								"error fetching document symbols for file: " .. file .. ": " .. vim.inspect(gopls_err),
+								vim.log.levels.ERROR
+							)
+						end
+						return
+					end
+
+					if result == nil then
+						return
+					end
+
+					vim.notify(#result .. " symbols found for file: " .. file, vim.log.levels.INFO)
+
+					for _, symbol in ipairs(result) do
+						local sanitized_symbol = utils:sanitize_raw_symbol(symbol)
+						if sanitized_symbol then
+							symbol.fuzzy_text = symbol.containerName .. symbol.name
+						end
+					end
+
+					cache:save(utils, result)
+					cache:save_in_memory(result)
+				end)
+			end
+		end)
+	end)
+end
+
+return gopls_utils

@@ -3,10 +3,11 @@ local sqlstmt = require("sqlite.stmt")
 local sqlite = require("sqlite.db")
 local math = require("math")
 
----@class cmp_go_deep.DB
----@field public setup fun(opts: cmp_go_deep.Options): cmp_go_deep.DB?
+---@class cmp_go_deep.cache
+---@field public setup fun(opts: cmp_go_deep.Options): cmp_go_deep.cache?
 ---@field public load fun(self, query_string: string, match_name: boolean?): table
 ---@field public save fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
+---@field public save_in_memory fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
 ---@field private load_by_name_stmt sqlstmt
 ---@field private load_by_fuzzy_text_stmt sqlstmt
 ---@field private insert_gosymbols_stmt sqlstmt
@@ -20,55 +21,49 @@ local math = require("math")
 ---@field private total_rows_estimate number -- pessimistic overestimation
 ---@field private notifications boolean
 ---@field private MAX_ROWS_THRESHOLD number
-local DB = {}
-local SCHEMA_VERSION = "0.0.7"
+local cache = {}
+local SCHEMA_VERSION = "0.0.8"
 
 ---@param opts cmp_go_deep.Options
----@return cmp_go_deep.DB?
-function DB.setup(opts)
-	DB.notifications = opts.notifications
-	DB.db_path = opts.db_path
-	DB.max_db_size_bytes = opts.db_size_limit_bytes
-	DB.db = sqlite:open(opts.db_path)
-	DB.MAX_ROWS_THRESHOLD = math.min(100000, math.floor(opts.db_size_limit_bytes / 1024))
-	DB.MAX_ROWS_THRESHOLD = math.max(DB.MAX_ROWS_THRESHOLD, 10000)
+---@return cmp_go_deep.cache?
+function cache.setup(opts)
+	cache.notifications = opts.notifications
+	cache.db_path = opts.db_path
+	cache.max_db_size_bytes = opts.db_size_limit_bytes
+	cache.db = sqlite:open(opts.db_path)
+	cache.MAX_ROWS_THRESHOLD = math.min(100000, math.floor(opts.db_size_limit_bytes / 1024))
+	cache.MAX_ROWS_THRESHOLD = math.max(cache.MAX_ROWS_THRESHOLD, 10000)
 
 	---TODO: rtfm and fine-tune these
-	local result = DB.db:eval("PRAGMA journal_mode = WAL")
+	local result = cache.db:eval("PRAGMA journal_mode = WAL")
 	if type(result) == "table" and result[1] and result[1].journal_mode ~= "wal" then
-		if DB.notifications then
+		if cache.notifications then
 			vim.notify("Failed to set journal_mode to WAL", vim.log.levels.WARN)
 		end
 	end
-	DB.db:eval("PRAGMA synchronous = NORMAL")
-	DB.db:eval("PRAGMA temp_store = MEMORY")
-	DB.db:eval("PRAGMA cache_size = -10000")
-	DB.db:eval("PRAGMA wal_autocheckpoint = 1000")
-	DB.db:eval("PRAGMA page_size = 4096")
-	DB.db:eval("PRAGMA auto_vacuum = incremental")
-	DB.db:eval("PRAGMA max_page_count = " .. math.ceil(DB.max_db_size_bytes / 4096))
+	cache.db:eval("PRAGMA synchronous = NORMAL")
+	cache.db:eval("PRAGMA temp_store = MEMORY")
+	cache.db:eval("PRAGMA cache_size = -10000")
+	cache.db:eval("PRAGMA wal_autocheckpoint = 1000")
+	cache.db:eval("PRAGMA page_size = 4096")
+	cache.db:eval("PRAGMA auto_vacuum = incremental")
+	cache.db:eval("PRAGMA max_page_count = " .. math.ceil(cache.max_db_size_bytes / 4096))
 
-	DB.db:eval([[
+	cache.db:eval([[
 		    CREATE TABLE IF NOT EXISTS meta (
 			schema_version TEXT PRIMARY KEY
-			go_version TEXT NOT NULL
 	  	    );
 		]])
 
-	local res = DB.db:eval("SELECT schema_version, go_version FROM meta;")
-	if
-		type(res) ~= "table"
-		or #res == 0
-		or res[1].schema_version ~= SCHEMA_VERSION
-		or res[1].go_version ~= cur_go_version
-	then
-		DB.db:eval("DELETE FROM meta")
-		DB.db:eval("INSERT INTO meta (version) VALUES ('" .. SCHEMA_VERSION .. "')")
-		DB.db:eval("DROP TABLE IF EXISTS gosymbols")
-		DB.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
-		DB.db:eval("DROP TABLE IF EXISTS gosymbol_cache")
-		DB.db:eval("PRAGMA wal_checkpoint(TRUNCATE);")
-		DB.db:eval("VACUUM;")
+	local res = cache.db:eval("SELECT schema_version FROM meta;")
+	if type(res) ~= "table" or #res == 0 or res[1].schema_version ~= SCHEMA_VERSION then
+		cache.db:eval("DELETE FROM meta")
+		cache.db:eval("INSERT INTO meta (schema_version) VALUES ('" .. SCHEMA_VERSION .. "')")
+		cache.db:eval("DROP TABLE IF EXISTS gosymbols")
+		cache.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
+		cache.db:eval("DROP TABLE IF EXISTS gosymbol_cache")
+		cache.db:eval("PRAGMA wal_checkpoint(TRUNCATE);")
+		cache.db:eval("VACUUM;")
 	end
 
 	local tables = {
@@ -88,37 +83,37 @@ function DB.setup(opts)
 	}
 
 	for _, sql in ipairs(tables) do
-		if not DB.db:eval(sql) then
-			if DB.notifications then
+		if not cache.db:eval(sql) then
+			if cache.notifications then
 				vim.notify("[sqlite] failed to create table", vim.log.levels.ERROR)
 			end
 			return nil
 		end
 	end
 
-	res = DB.db:eval("SELECT COUNT(*) as count FROM gosymbols")
+	res = cache.db:eval("SELECT COUNT(*) as count FROM gosymbols")
 	if type(res) ~= "table" or #res == 0 then
-		if DB.notifications then
+		if cache.notifications then
 			vim.notify("[sqlite] error reading db row count", vim.log.levels.ERROR)
 		end
 		return nil
 	end
-	DB.total_rows_estimate = res[1].count
+	cache.total_rows_estimate = res[1].count
 
 	if opts.debug then
-		vim.notify("[sqlite] db row count: " .. DB.total_rows_estimate, vim.log.levels.INFO)
+		vim.notify("[sqlite] db row count: " .. cache.total_rows_estimate, vim.log.levels.INFO)
 	end
 
-	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_last_modified ON gosymbols (last_modified DESC);")
-	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_hash ON gosymbols (hash DESC);")
+	cache.db:eval("CREATE INDEX IF NOT EXISTS idx_last_modified ON gosymbols (last_modified DESC);")
+	cache.db:eval("CREATE INDEX IF NOT EXISTS idx_hash ON gosymbols (hash DESC);")
 
 	vim.schedule(function()
-		DB.db:eval("PRAGMA wal_checkpoint(RESTART);")
-		DB.db:eval("ANALYZE;")
+		cache.db:eval("PRAGMA wal_checkpoint(RESTART);")
+		cache.db:eval("ANALYZE;")
 	end)
 
-	DB.load_by_fuzzy_text_stmt = sqlstmt:parse(
-		DB.db.conn,
+	cache.load_by_fuzzy_text_stmt = sqlstmt:parse(
+		cache.db.conn,
 		[[
 			SELECT gosymbols.data FROM gosymbols
 			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
@@ -128,8 +123,8 @@ function DB.setup(opts)
 	]]
 	)
 
-	DB.load_by_name_stmt = sqlstmt:parse(
-		DB.db.conn,
+	cache.load_by_name_stmt = sqlstmt:parse(
+		cache.db.conn,
 		[[
 			SELECT gosymbols.data FROM gosymbols
 			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
@@ -139,31 +134,31 @@ function DB.setup(opts)
 	]]
 	)
 
-	DB.insert_gosymbols_stmt = sqlstmt:parse(
-		DB.db.conn,
+	cache.insert_gosymbols_stmt = sqlstmt:parse(
+		cache.db.conn,
 		[[
 		    INSERT OR REPLACE INTO gosymbols (data, hash, last_modified)
 		    VALUES (?, ?, ?);
 		]]
 	)
 
-	DB.last_insert_rowid_stmt = sqlstmt:parse(
-		DB.db.conn,
+	cache.last_insert_rowid_stmt = sqlstmt:parse(
+		cache.db.conn,
 		[[
 		    SELECT last_insert_rowid();
 		]]
 	)
 
-	DB.insert_gosymbols_fts_stmt = sqlstmt:parse(
-		DB.db.conn,
+	cache.insert_gosymbols_fts_stmt = sqlstmt:parse(
+		cache.db.conn,
 		[[
 		    INSERT OR REPLACE INTO gosymbols_fts (name, fuzzy_text, id)
 		    VALUES (?, ?, ?);
 		]]
 	)
 
-	DB.delete_gosymbols_stmt = sqlstmt:parse(
-		DB.db.conn,
+	cache.delete_gosymbols_stmt = sqlstmt:parse(
+		cache.db.conn,
 		[[
 		    DELETE FROM gosymbols
 		    WHERE id IN (
@@ -172,8 +167,8 @@ function DB.setup(opts)
 		]]
 	)
 
-	DB.delete_fts_stmt = sqlstmt:parse(
-		DB.db.conn,
+	cache.delete_fts_stmt = sqlstmt:parse(
+		cache.db.conn,
 		[[
 		    DELETE FROM gosymbols_fts
 		    WHERE id IN (
@@ -182,13 +177,13 @@ function DB.setup(opts)
 		]]
 	)
 
-	return DB
+	return cache
 end
 
 ---@param query_string string
 ---@param match_name boolean?
 ---@return table
-function DB:load(query_string, match_name)
+function cache:load(query_string, match_name)
 	local stmt = self.load_by_fuzzy_text_stmt
 	if match_name then
 		stmt = self.load_by_name_stmt
@@ -205,7 +200,7 @@ function DB:load(query_string, match_name)
 end
 
 ---@return nil
-function DB:prune()
+function cache:prune()
 	local res = self.db:eval("SELECT COUNT(*) as count FROM gosymbols")
 	if type(res) ~= "table" or #res == 0 then
 		if self.notifications then
@@ -268,7 +263,7 @@ end
 
 ---@param utils cmp_go_deep.utils
 ---@param symbol_information table
-function DB:save(utils, symbol_information) --- assumes that gopls doesn't return more than 100 workspace symbols
+function cache:save(utils, symbol_information) --- assumes that gopls doesn't return more than 100 workspace symbols
 	local last_modified = os.time()
 	if not self.db:eval("BEGIN TRANSACTION;") then
 		if self.notifications then
@@ -329,4 +324,9 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 	end
 end
 
-return DB
+---@param symbol_information table
+function cache:save_in_memory(symbol_information)
+	cache.data = vim.tbl_extend("force", cache.data, symbol_information)
+end
+
+return cache

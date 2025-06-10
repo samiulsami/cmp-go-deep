@@ -1,5 +1,5 @@
 local utils = require("cmp_go_deep.utils")
-local gopls_requests = require("cmp_go_deep.gopls_requests")
+local gopls_requests = require("cmp_go_deep.gopls_utils")
 
 ---@class cmp_go_deep.Options
 ---@field public notifications boolean | nil -- whether to show notifications. default: true
