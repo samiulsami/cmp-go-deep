@@ -103,15 +103,24 @@ source.complete = function(_, params, callback)
 		cached_items = source.cache:load(cursor_prefix_word, true)
 	end
 
-	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
-		local iter = 3
-		local tmp_cursor_prefix_word = cursor_prefix_word
-		while #cached_items == 0 and iter > 0 and #tmp_cursor_prefix_word > 0 do
-			cached_items = source.cache:load(tmp_cursor_prefix_word, false)
-			iter = iter - 1
-			tmp_cursor_prefix_word = tmp_cursor_prefix_word:sub(1, #tmp_cursor_prefix_word - 1)
-		end
-	end
+	-- if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
+	-- 	local internal_symbols = source.cache:load_internal_symbols_from_memory()
+	-- 	if internal_symbols and #internal_symbols > 0 then
+	-- 		for _, symbol in ipairs(internal_symbols) do
+	-- 			if symbol.name:lower():match("builder") then
+	-- 				vim.notify(vim.inspect(symbol), vim.log.levels.INFO)
+	-- 			end
+	-- 		end
+	-- 	end
+	--
+	-- 	local iter = 3
+	-- 	local tmp_cursor_prefix_word = cursor_prefix_word
+	-- 	while #cached_items == 0 and iter > 0 and #tmp_cursor_prefix_word > 0 do
+	-- 		cached_items = source.cache:load(tmp_cursor_prefix_word, false)
+	-- 		iter = iter - 1
+	-- 		tmp_cursor_prefix_word = tmp_cursor_prefix_word:sub(1, #tmp_cursor_prefix_word - 1)
+	-- 	end
+	-- end
 
 	utils:debounced_process_symbols(
 		source.opts,
@@ -124,55 +133,55 @@ source.complete = function(_, params, callback)
 		true
 	)
 
-	gopls_utils.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
-		if not result or #result == 0 then
-			return callback({ items = {}, isIncomplete = false })
-		end
-
-		local filtered_result = {}
-		for _, symbol in ipairs(result) do
-			local sanitized_symbol = utils:sanitize_raw_symbol(symbol)
-			if sanitized_symbol then
-				if string.sub(sanitized_symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix then
-					sanitized_symbol.isVendored = true
-					sanitized_symbol.location.uri = sanitized_symbol.location.uri:sub(#vendor_path_prefix + 1)
-				elseif string.sub(sanitized_symbol.location.uri, 1, #project_path_prefix) == project_path_prefix then
-					sanitized_symbol.isLocal = true
-					sanitized_symbol.location.uri = sanitized_symbol.location.uri:sub(#project_path_prefix + 1)
-				end
-				sanitized_symbol.fuzzy_text = cursor_prefix_word
-				table.insert(filtered_result, sanitized_symbol)
-			end
-		end
-
-		source.cache:save(utils, filtered_result)
-		local items = {}
-		if
-			source.opts.matching_strategy == "substring_fuzzy_fallback"
-			or source.opts.matching_strategy == "substring"
-		then
-			items = source.cache:load(cursor_prefix_word, true)
-		end
-
-		if
-			#items == 0 and source.opts.matching_strategy == "substring_fuzzy_fallback"
-			or source.opts.matching_strategy == "fuzzy"
-		then
-			items = filtered_result
-			---TODO: fuzzy match internal internal packages (cache.load_internal_symbols_from_memory)
-		end
-
-		utils:debounced_process_symbols(
-			source.opts,
-			bufnr,
-			callback,
-			vendor_path_prefix,
-			project_path_prefix,
-			items,
-			processed_items,
-			true
-		)
-	end)
+	-- gopls_utils.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
+	-- 	if not result or #result == 0 then
+	-- 		return callback({ items = {}, isIncomplete = false })
+	-- 	end
+	--
+	-- 	local filtered_result = {}
+	-- 	for _, symbol in ipairs(result) do
+	-- 		local sanitized_symbol = utils:sanitize_raw_symbol(symbol)
+	-- 		if sanitized_symbol then
+	-- 			if string.sub(sanitized_symbol.location.uri, 1, #vendor_path_prefix) == vendor_path_prefix then
+	-- 				sanitized_symbol.isVendored = true
+	-- 				sanitized_symbol.location.uri = sanitized_symbol.location.uri:sub(#vendor_path_prefix + 1)
+	-- 			elseif string.sub(sanitized_symbol.location.uri, 1, #project_path_prefix) == project_path_prefix then
+	-- 				sanitized_symbol.isLocal = true
+	-- 				sanitized_symbol.location.uri = sanitized_symbol.location.uri:sub(#project_path_prefix + 1)
+	-- 			end
+	-- 			sanitized_symbol.fuzzy_text = cursor_prefix_word
+	-- 			table.insert(filtered_result, sanitized_symbol)
+	-- 		end
+	-- 	end
+	--
+	-- 	source.cache:save(utils, filtered_result)
+	-- 	local items = {}
+	-- 	if
+	-- 		source.opts.matching_strategy == "substring_fuzzy_fallback"
+	-- 		or source.opts.matching_strategy == "substring"
+	-- 	then
+	-- 		items = source.cache:load(cursor_prefix_word, true)
+	-- 	end
+	--
+	-- 	if
+	-- 		#items == 0 and source.opts.matching_strategy == "substring_fuzzy_fallback"
+	-- 		or source.opts.matching_strategy == "fuzzy"
+	-- 	then
+	-- 		items = filtered_result
+	-- 		---TODO: fuzzy match internal internal packages (cache.load_internal_symbols_from_memory)
+	-- 	end
+	--
+	-- 	utils:debounced_process_symbols(
+	-- 		source.opts,
+	-- 		bufnr,
+	-- 		callback,
+	-- 		vendor_path_prefix,
+	-- 		project_path_prefix,
+	-- 		items,
+	-- 		processed_items,
+	-- 		true
+	-- 	)
+	-- end)
 end
 
 ---@param completion_item lsp.CompletionItem

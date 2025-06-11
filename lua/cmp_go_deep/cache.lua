@@ -34,7 +34,7 @@ function cache.setup(opts)
 	cache.max_db_size_bytes = opts.db_size_limit_bytes
 	cache.db = sqlite:open(opts.db_path)
 	cache.MAX_ROWS_THRESHOLD = math.min(100000, math.floor(opts.db_size_limit_bytes / 1024))
-	cache.MAX_ROWS_THRESHOLD = math.max(cache.MAX_ROWS_THRESHOLD, 10000)
+	cache.MAX_ROWS_THRESHOLD = math.max(cache.MAX_ROWS_THRESHOLD, 100000)
 
 	---TODO: rtfm and fine-tune these
 	local result = cache.db:eval("PRAGMA journal_mode = WAL")
@@ -53,14 +53,14 @@ function cache.setup(opts)
 
 	cache.db:eval([[
 		    CREATE TABLE IF NOT EXISTS meta (
-			schema_version TEXT PRIMARY KEY
+			version TEXT PRIMARY KEY
 	  	    );
 		]])
 
-	local res = cache.db:eval("SELECT schema_version FROM meta;")
-	if type(res) ~= "table" or #res == 0 or res[1].schema_version ~= SCHEMA_VERSION then
+	local res = cache.db:eval("SELECT version FROM meta;")
+	if type(res) ~= "table" or #res == 0 or res[1].version ~= SCHEMA_VERSION then
 		cache.db:eval("DELETE FROM meta")
-		cache.db:eval("INSERT INTO meta (schema_version) VALUES ('" .. SCHEMA_VERSION .. "')")
+		cache.db:eval("INSERT INTO meta (version) VALUES ('" .. SCHEMA_VERSION .. "')")
 		cache.db:eval("DROP TABLE IF EXISTS gosymbols")
 		cache.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
 		cache.db:eval("DROP TABLE IF EXISTS gosymbol_cache")
@@ -265,7 +265,7 @@ end
 
 ---@param utils cmp_go_deep.utils
 ---@param symbol_information table
-function cache:save(utils, symbol_information) --- assumes that gopls doesn't return more than 100 workspace symbols
+function cache:save(utils, symbol_information)
 	local last_modified = os.time()
 	if not self.db:eval("BEGIN TRANSACTION;") then
 		if self.notifications then
@@ -317,13 +317,13 @@ function cache:save(utils, symbol_information) --- assumes that gopls doesn't re
 		return rollback("failed to end transaction")
 	end
 
-	self.total_rows_estimate = self.total_rows_estimate + #symbol_information
-
-	if self.total_rows_estimate > 0.8 * self.MAX_ROWS_THRESHOLD then
-		vim.schedule(function()
-			self:prune()
-		end)
-	end
+	-- self.total_rows_estimate = self.total_rows_estimate + #symbol_information
+	--
+	-- if self.total_rows_estimate > 0.8 * self.MAX_ROWS_THRESHOLD then
+	-- 	vim.schedule(function()
+	-- 		self:prune()
+	-- 	end)
+	-- end
 end
 
 ---@param symbol_information table

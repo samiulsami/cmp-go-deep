@@ -104,27 +104,29 @@ gopls_utils.scan_gosymbols_in_dir = function(dir, callback)
 		vim.uv.fs_scandir(path, function(err, handle)
 			if err then
 				pending = pending - 1
-				if pending == 0 then
+				if pending <= 0 then
 					callback(files)
 				end
 				return
 			end
 
-			while true do
+			local max_iterations = 10000
+			while max_iterations > 0 do
+				max_iterations = max_iterations - 1
 				local name, type = vim.uv.fs_scandir_next(handle)
 				if not name then
 					break
 				end
 
 				if type == "file" and string.match(name, "%.go$") then
-					table.insert(files, path .. "/" .. name)
+					table.insert(files, path .. name)
 				elseif type == "directory" then
-					scan_dir(path .. name)
+					scan_dir(path .. name .. "/")
 				end
 			end
 
 			pending = pending - 1
-			if pending == 0 then
+			if pending <= 0 then
 				callback(files)
 			end
 		end)
@@ -154,13 +156,25 @@ function gopls_utils:load_internal_symbols_into_cache(opts, gopls_client, utils,
 	end
 
 	local src_dir = go_root .. "/src/"
+	local called = false
 
 	self.scan_gosymbols_in_dir(src_dir, function(files)
-		vim.schedule(function()
-			vim.notify("Symbols found: " .. #files)
+		if called then
+			return
+		end
+		called = true
 
+		vim.notify("found " .. #files .. " files to load", vim.log.levels.INFO)
+
+		vim.schedule(function()
 			for _, file in ipairs(files) do
-				local uri = "file://" .. file
+				local filepath = file
+				local uri = "file://" .. filepath
+				local module_name = filepath:gsub(src_dir, "")
+				module_name = module_name:gsub("/.*%.go$", "")
+				if module_name == "cmd" then
+					vim.notify(uri, vim.log.levels.INFO)
+				end
 
 				gopls_client:request("textDocument/documentSymbol", {
 					textDocument = {
@@ -181,17 +195,30 @@ function gopls_utils:load_internal_symbols_into_cache(opts, gopls_client, utils,
 						return
 					end
 
-					vim.notify(#result .. " symbols found for file: " .. file, vim.log.levels.INFO)
+					local symbol_information = {}
 
 					for _, symbol in ipairs(result) do
+						symbol.location = {
+							uri = uri,
+							range = symbol.range,
+						}
+						symbol.containerName = module_name
+						symbol.children = nil
+						symbol.range = nil
+						symbol.selectionRange = nil
+						symbol.detail = nil
+
 						local sanitized_symbol = utils:sanitize_raw_symbol(symbol)
 						if sanitized_symbol then
 							symbol.fuzzy_text = symbol.containerName .. symbol.name
+							table.insert(symbol_information, sanitized_symbol)
 						end
 					end
 
-					cache:save(utils, result)
-					cache:save_internal_symbols_in_memory(result)
+					if #symbol_information > 0 then
+						cache:save(utils, symbol_information)
+						-- cache:save_internal_symbols_in_memory(symbol_information)
+					end
 				end)
 			end
 		end)

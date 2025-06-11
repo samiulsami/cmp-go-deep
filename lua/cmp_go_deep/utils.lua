@@ -221,10 +221,12 @@ end
 ---@return lsp.SymbolInformation|nil
 function utils:sanitize_raw_symbol(symbol)
 	symbol.name = symbol.name:match("^[^%.]+%.(.*)") or symbol.name
+
 	if
 		self.symbol_to_completion_kind(symbol.kind)
 		and not symbol.name:match("/")
 		and symbol.name:match("^[A-Z]")
+		and symbol.location
 		and not symbol.location.uri:match("test%.go$")
 	then
 		return symbol
@@ -271,6 +273,7 @@ end
 
 ---@param symbol lsp.SymbolInformation
 ---@return string
+---FIXME: possibly not deterministic for lsp.DocumentSymbol
 utils.deterministic_symbol_hash = function(symbol)
 	local ordered = symbol.name
 		.. " #"
@@ -325,6 +328,10 @@ function utils:process_symbols(
 		local hash = self.deterministic_symbol_hash(symbol)
 		if processed_items[hash] then
 			goto continue
+		end
+
+		if symbol.name:lower():match("chacha") then
+			vim.notify(vim.inspect(symbol))
 		end
 
 		processed_items[hash] = true
