@@ -164,17 +164,12 @@ function gopls_utils:load_internal_symbols_into_cache(opts, gopls_client, utils,
 		end
 		called = true
 
-		vim.notify("found " .. #files .. " files to load", vim.log.levels.INFO)
-
 		vim.schedule(function()
 			for _, file in ipairs(files) do
 				local filepath = file
 				local uri = "file://" .. filepath
 				local module_name = filepath:gsub(src_dir, "")
 				module_name = module_name:gsub("/.*%.go$", "")
-				if module_name == "cmd" then
-					vim.notify(uri, vim.log.levels.INFO)
-				end
 
 				gopls_client:request("textDocument/documentSymbol", {
 					textDocument = {

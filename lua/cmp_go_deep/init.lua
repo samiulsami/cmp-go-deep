@@ -100,7 +100,7 @@ source.complete = function(_, params, callback)
 
 	local cached_items = {}
 	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "substring" then
-		cached_items = source.cache:load(cursor_prefix_word, true)
+		cached_items = source.cache:load(cursor_prefix_word, false)
 	end
 
 	-- if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then

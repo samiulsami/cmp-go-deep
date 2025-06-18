@@ -330,10 +330,6 @@ function utils:process_symbols(
 			goto continue
 		end
 
-		if symbol.name:lower():match("chacha") then
-			vim.notify(vim.inspect(symbol))
-		end
-
 		processed_items[hash] = true
 
 		if symbol.isVendored then
