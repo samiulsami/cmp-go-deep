@@ -122,8 +122,10 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	debounce_cache_requests_ms = 0
 
 	-- Path to store the SQLite database
-	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
+
+	-- Path to store the internal symbols json file
+	internal_symbols_path = vim.fn.stdpath("data") .. "/cmp_go_deep_internal_symbols.json",
 
 	-- Maximum size for the SQLite database in bytes.
 	db_size_limit_bytes = 200 * 1024 * 1024, -- 200MB

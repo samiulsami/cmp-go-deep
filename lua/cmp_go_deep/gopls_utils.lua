@@ -97,13 +97,13 @@ gopls_utils.scan_gosymbols_in_dir = function(dir, callback)
 	local files = {}
 	local pending = 0
 
-	--FIXME: don't use recursion
 	local function scan_dir(path)
 		pending = pending + 1
 
 		vim.uv.fs_scandir(path, function(err, handle)
 			if err then
 				pending = pending - 1
+				vim.notify("failed to scan dir: " .. err, vim.log.levels.ERROR)
 				if pending <= 0 then
 					callback(files)
 				end
@@ -117,7 +117,6 @@ gopls_utils.scan_gosymbols_in_dir = function(dir, callback)
 				if not name then
 					break
 				end
-
 				if type == "file" and string.match(name, "%.go$") then
 					table.insert(files, path .. name)
 				elseif type == "directory" then
@@ -133,6 +132,39 @@ gopls_utils.scan_gosymbols_in_dir = function(dir, callback)
 	end
 
 	scan_dir(dir)
+end
+
+---@param symbols table
+---@param filepath string
+---@return string | nil
+local function save_symbols_into_file(symbols, filepath)
+	local file, err = io.open(filepath, "w")
+	if not file then
+		return "failed to open file for writing: " .. err
+	end
+
+	file:write(vim.fn.json_encode(symbols))
+	file:close()
+end
+
+---@param filepath string
+---@return table | nil
+---@return string | nil
+local function load_symbols_from_file(filepath)
+	local file, err = io.open(filepath, "r")
+	if not file then
+		return nil, "failed to open file for reading: " .. err
+	end
+
+	local json_string = file:read("*a")
+	file:close()
+
+	vim.notify("Loaded " .. #json_string .. " bytes from " .. filepath, vim.log.levels.INFO)
+
+	local decoded = vim.fn.json_decode(json_string)
+
+	vim.notify("Loaded " .. #decoded .. " internal symbols", vim.log.levels.INFO)
+	return decoded, nil
 end
 
 ---@param opts cmp_go_deep.Options
@@ -156,15 +188,33 @@ function gopls_utils:load_internal_symbols_into_cache(opts, gopls_client, utils,
 	end
 
 	local src_dir = go_root .. "/src/"
-	local called = false
+
+	local go_version, gover_err = utils.get_go_version()
+	if gover_err then
+		if opts.notifications then
+			vim.notify("failed to get go_version: " .. gover_err, vim.log.levels.ERROR)
+		end
+		return
+	end
+
+	local internal_symbols, load_err = load_symbols_from_file(opts.internal_symbols_path)
+	if load_err then
+		vim.notify("failed to load internal symbols: " .. load_err, vim.log.levels.ERROR)
+		return
+	end
+	if internal_symbols and internal_symbols.go_version == go_version then
+		vim.notify("Internal symbols are up to date. found " .. #internal_symbols .. " symbols", vim.log.levels.INFO)
+		cache:save_internal_symbols_in_memory(internal_symbols)
+		return
+	end
+
+	internal_symbols = {}
+
+	vim.notify("Loading internal symbols into cache...", vim.log.levels.INFO)
 
 	self.scan_gosymbols_in_dir(src_dir, function(files)
-		if called then
-			return
-		end
-		called = true
-
 		vim.schedule(function()
+			local pending = #files
 			for _, file in ipairs(files) do
 				local filepath = file
 				local uri = "file://" .. filepath
@@ -177,6 +227,7 @@ function gopls_utils:load_internal_symbols_into_cache(opts, gopls_client, utils,
 					},
 				}, function(gopls_err, result)
 					if gopls_err then
+						pending = pending - 1
 						if opts.notifications then
 							vim.notify(
 								"error fetching document symbols for file: " .. file .. ": " .. vim.inspect(gopls_err),
@@ -187,6 +238,7 @@ function gopls_utils:load_internal_symbols_into_cache(opts, gopls_client, utils,
 					end
 
 					if result == nil then
+						pending = pending - 1
 						return
 					end
 
@@ -210,9 +262,23 @@ function gopls_utils:load_internal_symbols_into_cache(opts, gopls_client, utils,
 						end
 					end
 
-					if #symbol_information > 0 then
-						cache:save(utils, symbol_information)
-						-- cache:save_internal_symbols_in_memory(symbol_information)
+					for _, symbol in ipairs(symbol_information) do
+						table.insert(internal_symbols, symbol)
+					end
+
+					pending = pending - 1
+					if pending <= 0 then
+						internal_symbols.go_version = go_version
+						local err = save_symbols_into_file(internal_symbols, opts.internal_symbols_path)
+						if err then
+							if opts.notifications then
+								vim.notify("Failed to save internal symbols: " .. err, vim.log.levels.ERROR)
+							end
+						end
+						cache:save_internal_symbols_in_memory(internal_symbols)
+						if opts.notifications then
+							vim.notify("Indexed " .. #internal_symbols .. " internal symbols", vim.log.levels.INFO)
+						end
 					end
 				end)
 			end

@@ -8,7 +8,7 @@ local math = require("math")
 ---@field public load fun(self, query_string: string, match_name: boolean?): table
 ---@field public save fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
 ---@field public save_internal_symbols_in_memory fun(self, symbol_information: table): nil
----@field public load_internal_symbols_from_memory fun(self): table | nil
+---@field public load_internal_symbols_from_memory fun(self): table
 ---@field private load_by_name_stmt sqlstmt
 ---@field private load_by_fuzzy_text_stmt sqlstmt
 ---@field private insert_gosymbols_stmt sqlstmt
@@ -47,7 +47,7 @@ function cache.setup(opts)
 	cache.db:eval("PRAGMA temp_store = MEMORY")
 	cache.db:eval("PRAGMA cache_size = -10000")
 	cache.db:eval("PRAGMA wal_autocheckpoint = 1000")
-	cache.db:eval("PRAGMA page_size = 4096")
+	cache.db:eval("PRAGMA page_size = 8192")
 	cache.db:eval("PRAGMA auto_vacuum = incremental")
 	cache.db:eval("PRAGMA max_page_count = " .. math.ceil(cache.max_db_size_bytes / 4096))
 
@@ -317,18 +317,18 @@ function cache:save(utils, symbol_information)
 		return rollback("failed to end transaction")
 	end
 
-	-- self.total_rows_estimate = self.total_rows_estimate + #symbol_information
-	--
-	-- if self.total_rows_estimate > 0.8 * self.MAX_ROWS_THRESHOLD then
-	-- 	vim.schedule(function()
-	-- 		self:prune()
-	-- 	end)
-	-- end
+	self.total_rows_estimate = self.total_rows_estimate + #symbol_information
+
+	if self.total_rows_estimate > 0.8 * self.MAX_ROWS_THRESHOLD then
+		vim.schedule(function()
+			self:prune()
+		end)
+	end
 end
 
 ---@param symbol_information table
 function cache:save_internal_symbols_in_memory(symbol_information)
-	cache.internal_symbols = vim.tbl_extend("force", cache.internal_symbols or {}, symbol_information)
+	cache.internal_symbols = symbol_information
 end
 
 ---@return table

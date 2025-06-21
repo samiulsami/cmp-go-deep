@@ -12,6 +12,7 @@ local gopls_utils = require("cmp_go_deep.gopls_utils")
 ---@field public debounce_gopls_requests_ms integer | nil -- time to wait before "locking-in" the current request and sending it to gopls. default: 0
 ---@field public debounce_cache_requests_ms integer | nil -- time to wait before "locking-in" the current request and loading data from cache. default: 0
 ---@field public db_path string | nil -- where to store the sqlite db. default: ~/.local/share/nvim/cmp_go_deep.sqlite3
+---@field public internal_symbols_path string | nil -- where to store the internal symbols json file. default: ~/.local/share/nvim/cmp_go_deep_internal_symbols.json
 ---@field public db_size_limit_bytes number | nil -- max db size in bytes. default: 200MB
 ---@field public debug boolean | nil -- whether to enable debug logging. default: false
 
@@ -27,6 +28,7 @@ local default_options = {
 	debounce_gopls_requests_ms = 0,
 	debounce_cache_requests_ms = 0,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
+	internal_symbols_path = vim.fn.stdpath("data") .. "/cmp_go_deep_internal_symbols.json",
 	db_size_limit_bytes = 200 * 1024 * 1024,
 	debug = false,
 }
@@ -99,17 +101,15 @@ source.complete = function(_, params, callback)
 	local project_path_prefix = "file://" .. project_path .. "/"
 
 	local cached_items = {}
-	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "substring" then
-		cached_items = source.cache:load(cursor_prefix_word, false)
-	end
+	-- if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "substring" then
+	-- 	cached_items = source.cache:load(cursor_prefix_word, false)
+	-- end
 
 	-- if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
 	-- 	local internal_symbols = source.cache:load_internal_symbols_from_memory()
 	-- 	if internal_symbols and #internal_symbols > 0 then
 	-- 		for _, symbol in ipairs(internal_symbols) do
-	-- 			if symbol.name:lower():match("builder") then
-	-- 				vim.notify(vim.inspect(symbol), vim.log.levels.INFO)
-	-- 			end
+	-- 			vim.notify(vim.inspect(symbol), vim.log.levels.INFO)
 	-- 		end
 	-- 	end
 	--
@@ -121,6 +121,15 @@ source.complete = function(_, params, callback)
 	-- 		tmp_cursor_prefix_word = tmp_cursor_prefix_word:sub(1, #tmp_cursor_prefix_word - 1)
 	-- 	end
 	-- end
+
+	local internal_symbols = source.cache:load_internal_symbols_from_memory()
+	vim.notify(#internal_symbols, vim.log.levels.INFO)
+	for _, symbol in ipairs(internal_symbols) do
+		vim.notify(vim.inspect(symbol), vim.log.levels.INFO)
+		if symbol.name:lower():match(cursor_prefix_word:lower()) then
+			table.insert(cached_items, symbol)
+		end
+	end
 
 	utils:debounced_process_symbols(
 		source.opts,

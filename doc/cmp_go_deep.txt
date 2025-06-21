@@ -118,6 +118,10 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
         Path to store the SQLite database.
         Default: `vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3"`
 
+    • `internal_symbols_path`
+        Path to store the internal symbols json file.
+        Default: `vim.fn.stdpath("data") .. "/cmp_go_deep_internal_symbols.json"`
+
     • `db_size_limit_bytes`
         Maximum size for the SQLite database in bytes.
         Default: `200 * 1024 * 1024` (200MB)
