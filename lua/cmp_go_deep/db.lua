@@ -20,17 +20,18 @@ local math = require("math")
 ---@field private total_rows_estimate number -- pessimistic overestimation
 ---@field private notifications boolean
 ---@field private MAX_ROWS_THRESHOLD number
-local DB = {}
-local SCHEMA_VERSION = "0.0.7"
+local DB = {
+	max_db_size_bytes = 200 * 1024 * 1024,
+}
+local SCHEMA_VERSION = "0.0.8"
 
 ---@param opts cmp_go_deep.Options
 ---@return cmp_go_deep.DB?
 function DB.setup(opts)
 	DB.notifications = opts.notifications
 	DB.db_path = opts.db_path
-	DB.max_db_size_bytes = opts.db_size_limit_bytes
 	DB.db = sqlite:open(opts.db_path)
-	DB.MAX_ROWS_THRESHOLD = math.min(100000, math.floor(opts.db_size_limit_bytes / 1024))
+	DB.MAX_ROWS_THRESHOLD = math.min(100000, math.floor(DB.max_db_size_bytes / 1024))
 	DB.MAX_ROWS_THRESHOLD = math.max(DB.MAX_ROWS_THRESHOLD, 10000)
 
 	---TODO: rtfm and fine-tune these

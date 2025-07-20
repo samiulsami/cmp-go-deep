@@ -117,10 +117,6 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
     • `db_path`
         Path to store the SQLite database.
         Default: `vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3"`
-
-    • `db_size_limit_bytes`
-        Maximum size for the SQLite database in bytes.
-        Default: `200 * 1024 * 1024` (200MB)
 ==============================================================================
 
 vim:tw=80:ts=4:ft=help:norl:

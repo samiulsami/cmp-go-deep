@@ -4,7 +4,7 @@ A Go ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim
 
 #### Why?
 
-At the time of writing, the Go Language Server (```gopls@v0.18.1```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
+At the time of writing, the Go Language Server (```gopls@v0.19.1```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
 
 
 #### How?
@@ -124,9 +124,6 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	-- Path to store the SQLite database
 	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
-
-	-- Maximum size for the SQLite database in bytes.
-	db_size_limit_bytes = 200 * 1024 * 1024, -- 200MB
 }
 ```
 ---
