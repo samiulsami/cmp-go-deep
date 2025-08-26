@@ -43,7 +43,7 @@ local function populate()
 
 	local opts = {
 		db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
-		db_size_limit_bytes = 200 * 1024 * 1024,
+		db_size_limit_bytes = 100 * 1024 * 1024,
 	}
 	local db = DB.setup(opts)
 

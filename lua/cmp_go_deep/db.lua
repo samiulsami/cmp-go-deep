@@ -21,9 +21,9 @@ local math = require("math")
 ---@field private notifications boolean
 ---@field private MAX_ROWS_THRESHOLD number
 local DB = {
-	max_db_size_bytes = 200 * 1024 * 1024,
+	max_db_size_bytes = 100 * 1024 * 1024,
 }
-local SCHEMA_VERSION = "0.0.8"
+local SCHEMA_VERSION = "0.0.9"
 
 ---@param opts cmp_go_deep.Options
 ---@return cmp_go_deep.DB?
@@ -43,9 +43,9 @@ function DB.setup(opts)
 	end
 	DB.db:eval("PRAGMA synchronous = NORMAL")
 	DB.db:eval("PRAGMA temp_store = MEMORY")
-	DB.db:eval("PRAGMA cache_size = -10000")
+	DB.db:eval("PRAGMA cache_size = -50000")
+	DB.db:eval("PRAGMA page_size = 8192")
 	DB.db:eval("PRAGMA wal_autocheckpoint = 1000")
-	DB.db:eval("PRAGMA page_size = 4096")
 	DB.db:eval("PRAGMA auto_vacuum = incremental")
 	DB.db:eval("PRAGMA max_page_count = " .. math.ceil(DB.max_db_size_bytes / 4096))
 
@@ -106,11 +106,6 @@ function DB.setup(opts)
 
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_last_modified ON gosymbols (last_modified DESC);")
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_hash ON gosymbols (hash DESC);")
-
-	vim.schedule(function()
-		DB.db:eval("PRAGMA wal_checkpoint(RESTART);")
-		DB.db:eval("ANALYZE;")
-	end)
 
 	DB.load_by_fuzzy_text_stmt = sqlstmt:parse(
 		DB.db.conn,
@@ -233,7 +228,6 @@ function DB:prune()
 			vim.notify("[sqlite] " .. msg, vim.log.levels.ERROR)
 		end
 		self.db:eval("PRAGMA wal_checkpoint(RESTART);")
-		self.db:eval("PRAGMA incremental_vacuum;")
 		self.db:eval("ROLLBACK;")
 	end
 
@@ -257,7 +251,6 @@ function DB:prune()
 
 	self.total_rows_estimate = self.total_rows_estimate - to_delete
 
-	self.db:eval("PRAGMA wal_checkpoint(PASSIVE);")
 	self.db:eval("PRAGMA incremental_vacuum;")
 end
 

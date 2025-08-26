@@ -261,7 +261,7 @@ function utils:process_symbols(
 	processed_items,
 	isIncomplete
 )
-	local items = {}
+        local items = {}
 	local package_name_cache = {}
 	local imported_paths = utils.get_imported_paths(opts, bufnr)
 
