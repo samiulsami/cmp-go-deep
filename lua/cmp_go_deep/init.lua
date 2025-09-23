@@ -104,7 +104,7 @@ source.complete = function(_, params, callback)
 	end
 
 	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
-		local iter = 3
+		local iter = 13
 		local tmp_cursor_prefix_word = cursor_prefix_word
 		while #cached_items == 0 and iter > 0 and #tmp_cursor_prefix_word > 0 do
 			cached_items = source.cache:load(tmp_cursor_prefix_word, false)

@@ -32,6 +32,9 @@ local symbol_to_completion_kind = {
 ---@return fun(...)
 utils.debounce = function(fn, delay_ms)
 	local timer = vim.uv.new_timer()
+	if not timer then
+		error("failed to create uv timer")
+	end
 
 	return function(...)
 		timer:stop()
@@ -261,7 +264,7 @@ function utils:process_symbols(
 	processed_items,
 	isIncomplete
 )
-        local items = {}
+	local items = {}
 	local package_name_cache = {}
 	local imported_paths = utils.get_imported_paths(opts, bufnr)
 

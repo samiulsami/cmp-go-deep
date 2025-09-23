@@ -23,7 +23,7 @@ local math = require("math")
 local DB = {
 	max_db_size_bytes = 100 * 1024 * 1024,
 }
-local SCHEMA_VERSION = "0.0.9"
+local SCHEMA_VERSION = "0.0.10"
 
 ---@param opts cmp_go_deep.Options
 ---@return cmp_go_deep.DB?
@@ -78,7 +78,7 @@ function DB.setup(opts)
 
 		[[
 		    CREATE VIRTUAL TABLE IF NOT EXISTS gosymbols_fts
-		    USING fts5(name, fuzzy_text, id, tokenize='porter trigram');
+		    USING fts5(name, fuzzy_text, id, tokenize='trigram');
 		]],
 	}
 
