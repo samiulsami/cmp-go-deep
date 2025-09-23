@@ -75,10 +75,10 @@ source.complete = function(_, params, callback)
 	callback({ items = {}, isIncomplete = true })
 
 	if not source.cache then
-		vim.schedule(function()
-			source.cache = require("cmp_go_deep.db").setup(source.opts)
-		end)
-                return callback({ items = {}, isIncomplete = true })
+		source.cache = require("cmp_go_deep.db").setup(source.opts)
+		if not source.cache then
+			return callback({ items = {}, isIncomplete = false })
+		end
 	end
 
 	if not gopls_requests.debounced_workspace_symbols then
