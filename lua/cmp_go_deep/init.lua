@@ -36,9 +36,19 @@ source.new = function()
 end
 
 source.is_available = function()
-	if utils.get_gopls_client() == nil then
+	local gopls_client = utils.get_gopls_client()
+	if gopls_client == nil then
 		return false
 	end
+
+	if not source.gopls_warmed_up then
+		source.gopls_warmed_up = true
+		vim.schedule(function()
+			-- stylua: ignore
+			gopls_requests.workspace_symbols(default_options, gopls_client, vim.api.nvim_get_current_buf(), "", function() end)
+		end)
+	end
+
 	return true
 end
 
