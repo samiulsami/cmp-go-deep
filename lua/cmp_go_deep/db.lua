@@ -118,7 +118,7 @@ function DB.setup(opts)
 			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
 			WHERE gosymbols_fts.fuzzy_text LIKE '%' || ? || '%'
 			ORDER BY gosymbols.last_modified DESC
-			LIMIT 500;
+			LIMIT 100;
 	]]
 	)
 
@@ -129,7 +129,7 @@ function DB.setup(opts)
 			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
 			WHERE gosymbols_fts.name LIKE '%' || ? || '%'
 			ORDER BY gosymbols.last_modified DESC
-			LIMIT 500;
+			LIMIT 100;
 	]]
 	)
 
