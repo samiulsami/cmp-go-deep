@@ -169,10 +169,7 @@ source.complete = function(_, params, callback)
 			items = source.cache:load(cursor_prefix_word, true)
 		end
 
-		if
-			#items == 0 and source.opts.matching_strategy == "substring_fuzzy_fallback"
-			or source.opts.matching_strategy == "fuzzy"
-		then
+		if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
 			items = vim.tbl_extend("force", items, filtered_result)
 		end
 
@@ -205,7 +202,7 @@ function source:resolve(completion_item, callback)
 		return callback(completion_item)
 	end
 
-	if not type(symbol.location) == "table" then
+	if type(symbol.location) ~= "table" then
 		if opts.notifications then
 			vim.notify("Warning: symbol location is missing", vim.log.levels.WARN)
 		end
