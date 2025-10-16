@@ -16,14 +16,16 @@ local math = require("math")
 ---@field private delete_gosymbols_stmt sqlstmt
 ---@field private db sqlite_db
 ---@field private db_path string
----@field private max_db_size_bytes number
 ---@field private total_rows_estimate number -- pessimistic overestimation
 ---@field private notifications boolean
+---@field private MAX_DB_SIZE_BYTES number
 ---@field private MAX_ROWS_THRESHOLD number
+---@field private PRUNE_PERCENTAGE_THRESHOLD number
 local DB = {
-	max_db_size_bytes = 100 * 1024 * 1024,
+	MAX_DB_SIZE_BYTES = 100 * 1024 * 1024,
+	PRUNE_PERCENTAGE_THRESHOLD = 0.6,
 }
-local SCHEMA_VERSION = "0.0.10"
+local SCHEMA_VERSION = "0.0.11"
 
 ---@param opts cmp_go_deep.Options
 ---@return cmp_go_deep.DB?
@@ -31,7 +33,7 @@ function DB.setup(opts)
 	DB.notifications = opts.notifications
 	DB.db_path = opts.db_path
 	DB.db = sqlite:open(opts.db_path)
-	DB.MAX_ROWS_THRESHOLD = math.min(100000, math.floor(DB.max_db_size_bytes / 1024))
+	DB.MAX_ROWS_THRESHOLD = math.floor(DB.MAX_DB_SIZE_BYTES / 8192)
 	DB.MAX_ROWS_THRESHOLD = math.max(DB.MAX_ROWS_THRESHOLD, 10000)
 
 	---TODO: rtfm and fine-tune these
@@ -41,13 +43,15 @@ function DB.setup(opts)
 			vim.notify("Failed to set journal_mode to WAL", vim.log.levels.WARN)
 		end
 	end
+	DB.db:eval("PRAGMA page_size = 8192")
+	DB.db:eval("PRAGMA max_page_count = " .. math.ceil(2.0 * DB.MAX_DB_SIZE_BYTES / 8192))
 	DB.db:eval("PRAGMA synchronous = NORMAL")
 	DB.db:eval("PRAGMA temp_store = MEMORY")
-	DB.db:eval("PRAGMA cache_size = -50000")
-	DB.db:eval("PRAGMA page_size = 8192")
-	DB.db:eval("PRAGMA wal_autocheckpoint = 1000")
+	DB.db:eval("PRAGMA cache_size = -100000")
+	DB.db:eval("PRAGMA mmap_size = 268435456")
+	DB.db:eval("PRAGMA wal_autocheckpoint = 2000")
+	DB.db:eval("PRAGMA busy_timeout = 5000")
 	DB.db:eval("PRAGMA auto_vacuum = incremental")
-	DB.db:eval("PRAGMA max_page_count = " .. math.ceil(DB.max_db_size_bytes / 4096))
 
 	DB.db:eval([[
 		    CREATE TABLE IF NOT EXISTS meta (
@@ -310,7 +314,7 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 
 	self.total_rows_estimate = self.total_rows_estimate + #symbol_information
 
-	if self.total_rows_estimate > 0.8 * self.MAX_ROWS_THRESHOLD then
+	if self.total_rows_estimate > self.PRUNE_PERCENTAGE_THRESHOLD * self.MAX_ROWS_THRESHOLD then
 		vim.schedule(function()
 			self:prune()
 		end)

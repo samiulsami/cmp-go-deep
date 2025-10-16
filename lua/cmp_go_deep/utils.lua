@@ -37,7 +37,6 @@ utils.debounce = function(fn, delay_ms)
 	end
 
 	return function(...)
-		timer:stop()
 		local args = { ... }
 		timer:start(delay_ms, 0, function()
 			vim.schedule(function()
@@ -279,12 +278,10 @@ function utils:process_symbols(
 
 	---TODO: better type checking and error handling
 	for _, symbol in ipairs(symbols) do
-		local kind = utils.symbol_to_completion_kind(symbol.kind)
 		local hash = self.deterministic_symbol_hash(symbol)
 		if processed_items[hash] then
 			goto continue
 		end
-
 		processed_items[hash] = true
 
 		if symbol.isVendored then
@@ -294,6 +291,7 @@ function utils:process_symbols(
 		end
 
 		local symbol_dir = vim.fn.fnamemodify(symbol.location.uri, ":h")
+		local kind = utils.symbol_to_completion_kind(symbol.kind)
 
 		if
 			kind
