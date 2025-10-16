@@ -163,7 +163,7 @@ source.complete = function(_, params, callback)
 			#items == 0 and source.opts.matching_strategy == "substring_fuzzy_fallback"
 			or source.opts.matching_strategy == "fuzzy"
 		then
-			items = filtered_result
+			items = vim.tbl_extend("force", items, filtered_result)
 		end
 
 		utils:debounced_process_symbols(
