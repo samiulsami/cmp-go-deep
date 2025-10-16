@@ -171,7 +171,13 @@ source.complete = function(_, params, callback)
 			items = source.cache:load(cursor_prefix_word, true)
 		end
 
-		if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
+		if
+			#items == 0
+			and (
+				source.opts.matching_strategy == "substring_fuzzy_fallback"
+				or source.opts.matching_strategy == "fuzzy"
+			)
+		then
 			items = vim.tbl_extend("force", items, filtered_result)
 		end
 

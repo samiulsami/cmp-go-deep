@@ -20,5 +20,12 @@ end
 clone_plugin("kkharji/sqlite.lua", "sqlite.lua")
 clone_plugin("hrsh7th/nvim-cmp", "nvim-cmp")
 clone_plugin("Saghen/blink.cmp", "blink.cmp")
+clone_plugin("saghen/blink.compat", "blink.compat")
+
 clone_plugin("neovim/nvim-lspconfig", "nvim-lspconfig")
 clone_plugin("nvim-treesitter/nvim-treesitter", "nvim-treesitter")
+
+require("nvim-treesitter.configs").setup({
+	ensure_installed = { "go" },
+	sync_install = true,
+})

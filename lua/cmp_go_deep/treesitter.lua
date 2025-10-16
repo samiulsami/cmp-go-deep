@@ -95,7 +95,6 @@ treesitter.add_import_statement = function(opts, bufnr, package_alias, import_pa
 			"import (",
 			"\t" .. package_alias .. '"' .. import_path .. '"',
 			")",
-			"",
 		})
 	end
 end

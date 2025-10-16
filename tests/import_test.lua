@@ -41,6 +41,7 @@ local test_cases = {
 			'\t"os"',
 			'\t"fmt"',
 			")",
+			"",
 			"func main() {",
 			"}",
 		},

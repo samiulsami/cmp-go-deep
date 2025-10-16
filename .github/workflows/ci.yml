@@ -26,9 +26,9 @@ jobs:
           version: ${{ matrix.nvim_version }}
 
       - name: Install Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: stable
+          go-version: '1.25.3'
 
       - name: Install gopls
         run: go install golang.org/x/tools/gopls@latest
@@ -36,7 +36,6 @@ jobs:
       - name: Run tests
         run: |
           nvim --version
-          nvim --headless -u tests/minimal_init.lua -c "lua require('tests.import_test')" -c "qa!"
-          nvim --headless -u tests/minimal_init.lua -c "lua require('tests.db_test')" -c "qa!"
-          nvim --headless -u tests/minimal_init.lua -c "lua require('tests.nvim_cmp_test')" -c "qa!"
-          nvim --headless -u tests/minimal_init.lua -c "lua require('tests.blink_test')" -c "qa!"
+          nvim --headless -u tests/minimal_init.lua -c "luafile tests/completion_test.lua" -c "qa"
+          nvim --headless -u tests/minimal_init.lua -c "luafile tests/import_test.lua" -c "qa"
+          nvim --headless -u tests/minimal_init.lua -c "luafile tests/db_test.lua" -c "qa"
