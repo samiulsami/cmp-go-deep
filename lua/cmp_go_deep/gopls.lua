@@ -1,8 +1,8 @@
----@class cmp_go_deep.gopls_requests
+---@class cmp_go_deep.gopls
 ---@field get_documentation fun(opts: cmp_go_deep.Options, gopls_client: vim.lsp.Client | nil, uri: string, range: lsp.Range): string|nil
 ---@field debounced_workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
 ---@field public workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): nil
-local gopls_requests = {}
+local gopls = {}
 
 ---@param opts cmp_go_deep.Options
 ---@param gopls_client vim.lsp.Client | nil
@@ -10,7 +10,7 @@ local gopls_requests = {}
 ---@param range lsp.Range
 ---@return string | nil
 ---TODO: try completionItem/resolve instead
-gopls_requests.get_documentation = function(opts, gopls_client, uri, range)
+gopls.get_documentation = function(opts, gopls_client, uri, range)
 	if gopls_client == nil then
 		if opts.notifications then
 			vim.notify("gopls client is nil", vim.log.levels.WARN)
@@ -57,7 +57,7 @@ end
 ---@param cursor_prefix_word string
 ---@param callback fun(items: lsp.SymbolInformation[]): nil
 -- stylua: ignore
-gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, cursor_prefix_word, callback)
+gopls.workspace_symbols = function(opts, gopls_client, bufnr, cursor_prefix_word, callback)
 	local success, _ = gopls_client:request("workspace/symbol", { query = cursor_prefix_word }, function(_, result)
 		if not result then
 			return
@@ -73,4 +73,4 @@ gopls_requests.workspace_symbols = function(opts, gopls_client, bufnr, cursor_pr
 	end
 end
 
-return gopls_requests
+return gopls

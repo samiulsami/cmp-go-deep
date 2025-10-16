@@ -1,4 +1,4 @@
-local treesitter_implementations = {}
+local treesitter = {}
 
 ---@param bufnr (integer)
 ---@return TSNode | nil
@@ -27,7 +27,7 @@ end
 ---@param bufnr (integer)
 ---@param package_alias string | nil
 ---@param import_path string
-treesitter_implementations.add_import_statement = function(opts, bufnr, package_alias, import_path)
+treesitter.add_import_statement = function(opts, bufnr, package_alias, import_path)
 	local root = get_root_node(bufnr)
 	if root == nil then
 		return
@@ -110,7 +110,7 @@ end
 ---@param opts cmp_go_deep.Options
 ---@param bufnr (integer)
 ---@return table<string, string> -- key: import path, value: package alias
-treesitter_implementations.get_imported_paths = function(opts, bufnr)
+treesitter.get_imported_paths = function(opts, bufnr)
 	local root = get_root_node(bufnr)
 	if root == nil then
 		return {}
@@ -175,7 +175,7 @@ end
 
 ---@param uri string
 ---@return string|nil
-treesitter_implementations.get_package_name = function(uri)
+treesitter.get_package_name = function(uri)
 	local filepath = vim.uri_to_fname(uri)
 	local bufnr = vim.fn.bufadd(filepath)
 	local root = get_root_node(bufnr)
@@ -196,4 +196,4 @@ treesitter_implementations.get_package_name = function(uri)
 	return nil
 end
 
-return treesitter_implementations
+return treesitter

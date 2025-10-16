@@ -1,5 +1,5 @@
 local utils = require("cmp_go_deep.utils")
-local gopls_requests = require("cmp_go_deep.gopls_requests")
+local gopls = require("cmp_go_deep.gopls")
 
 ---@class cmp_go_deep.Options
 ---@field public notifications boolean | nil whether to show notifications. default: true
@@ -45,7 +45,7 @@ source.is_available = function()
 		source.gopls_warmed_up = true
 		vim.schedule(function()
 			-- stylua: ignore
-			gopls_requests.workspace_symbols(default_options, gopls_client, vim.api.nvim_get_current_buf(), "", function() end)
+			gopls.workspace_symbols(default_options, gopls_client, vim.api.nvim_get_current_buf(), "", function() end)
 		end)
 	end
 
@@ -91,9 +91,9 @@ source.complete = function(_, params, callback)
 		end
 	end
 
-	if not gopls_requests.debounced_workspace_symbols then
-		gopls_requests.debounced_workspace_symbols =
-			utils.debounce(gopls_requests.workspace_symbols, source.opts.debounce_gopls_requests_ms)
+	if not gopls.debounced_workspace_symbols then
+		gopls.debounced_workspace_symbols =
+			utils.debounce(gopls.workspace_symbols, source.opts.debounce_gopls_requests_ms)
 	end
 
 	if not utils.debounced_process_symbols then
@@ -134,7 +134,7 @@ source.complete = function(_, params, callback)
 		true
 	)
 
-	gopls_requests.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
+	gopls.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
 		if not result or #result == 0 then
 			return callback({ items = {}, isIncomplete = false })
 		end
