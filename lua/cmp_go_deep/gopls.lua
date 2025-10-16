@@ -43,9 +43,7 @@ gopls.get_documentation = function(opts, gopls_client, uri, range)
 	end, 10)
 
 	if markdown == "" and opts.notifications then
-		if opts.notifications then
-			vim.notify("timed out waiting for documentation", vim.log.levels.WARN)
-		end
+		vim.notify("timed out waiting for documentation", vim.log.levels.WARN)
 	end
 
 	return markdown
