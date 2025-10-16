@@ -9,7 +9,7 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, package_alias: string): string
 ---@field get_gopls_client fun(): vim.lsp.Client|nil
 ---@field get_documentation fun(opts: cmp_go_deep.Options, uri: string, range: lsp.Range): string|nil
----@field get_imported_paths fun(opts: cmp_go_deep.Options, bufnr: integer): table<string, string>bufnr: integer): table<string, string>
+---@field get_imported_paths fun(opts: cmp_go_deep.Options, bufnr: integer): table<string, string>
 ---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
 ---@field deterministic_symbol_hash fun(symbol: lsp.SymbolInformation): string
@@ -180,7 +180,6 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 	end
 
 	--default to regex
-	--- FIXME: regex implementation doesn't work for package declarations like: "/* hehe */ package xd"
 	local fname = vim.uri_to_fname(uri)
 	if not fname then
 		if opts.notifications then

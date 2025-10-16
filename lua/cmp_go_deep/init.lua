@@ -81,7 +81,7 @@ source.complete = function(_, params, callback)
 		return callback({ items = {}, isIncomplete = false })
 	end
 
-	-- FIXME: Debounce doesn't work unless we make this callback here
+	-- Required for async completion: signals to completion engine that results are pending
 	callback({ items = {}, isIncomplete = true })
 
 	if not source.cache then
@@ -114,6 +114,8 @@ source.complete = function(_, params, callback)
 	end
 
 	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
+		-- Progressive suffix removal for fuzzy matching
+		-- Example: "HandlerFunc" -> "HandlerFun" -> ... -> "HandlerF"
 		local iter = 13
 		local tmp_cursor_prefix_word = cursor_prefix_word
 		while #cached_items == 0 and iter > 0 and #tmp_cursor_prefix_word > 0 do

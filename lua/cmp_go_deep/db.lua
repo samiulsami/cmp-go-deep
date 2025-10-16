@@ -36,7 +36,7 @@ function DB.setup(opts)
 	DB.MAX_ROWS_THRESHOLD = math.floor(DB.MAX_DB_SIZE_BYTES / 8192)
 	DB.MAX_ROWS_THRESHOLD = math.max(DB.MAX_ROWS_THRESHOLD, 10000)
 
-	---TODO: rtfm and fine-tune these
+
 	local result = DB.db:eval("PRAGMA journal_mode = WAL")
 	if type(result) == "table" and result[1] and result[1].journal_mode ~= "wal" then
 		if DB.notifications then

@@ -102,7 +102,6 @@ end
 
 ---@param str string
 ---@return string
----@return integer count
 local function trim_quotes(str)
 	return str:gsub('^["`]+', ""):gsub('["`]+$', "")
 end
