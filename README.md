@@ -4,7 +4,7 @@ A Go ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim
 
 #### Why?
 
-At the time of writing, the Go Language Server (```gopls@v0.19.1```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
+At the time of writing, the Go Language Server (```gopls@v0.20.0```) doesn't seem to support deep completions for unimported packages. For example, with deep completion enabled, typing ```'cha'``` could suggest ```'rand.NewChaCha8()'``` as a possible completion option - but that is not the case no matter how high the completion budget is set for ```gopls```.
 
 
 #### How?
@@ -31,23 +31,23 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 ##### - nvim-cmp
 ```lua
 {
-    "hrsh7th/nvim-cmp",
-    dependencies = {
-	{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
-    },
-    ...
-    require("cmp").setup({
-        sources = {{
-            name = "go_deep",
-	    keyword_length = 3,
-	    max_item_count = 5,
-            ---@module "cmp_go_deep"
-	    ---@type cmp_go_deep.Options
-            option = {
-                -- See below for configuration options
-            },
-        }},
-    })
+	"hrsh7th/nvim-cmp",
+	dependencies = {
+		{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
+	},
+	...
+	require("cmp").setup({
+		sources = {{
+			name = "go_deep",
+			keyword_length = 3,
+			max_item_count = 5,
+			---@module "cmp_go_deep"
+			---@type cmp_go_deep.Options
+			option = {
+				-- See below for configuration options
+			},
+		}},
+	})
 }
 ```
 ##### - blink.cmp <i>(requires saghen/blink.compat)</i>

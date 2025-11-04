@@ -12,16 +12,16 @@ SETUP-nvim-cmp                                                 *cmp_go_deep-setu
 {
     "hrsh7th/nvim-cmp",
     dependencies = {
-	{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
+        { "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
     },
     ...
     require("cmp").setup({
         sources = {{
             name = "go_deep",
-	    keyword_length = 3,
-	    max_item_count = 5,
+            keyword_length = 3,
+            max_item_count = 5,
             ---@module "cmp_go_deep"
-	    ---@type cmp_go_deep.Options
+            ---@type cmp_go_deep.Options
             option = {
                 -- See below for configuration options
             },
@@ -34,31 +34,31 @@ SETUP-nvim-cmp                                                 *cmp_go_deep-setu
 SETUP-blink.cmp                                               *cmp_go_deep-setup-blink*
 >lua
 {
-	"saghen/blink.cmp",
-	dependencies = {
-		{ "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
-		{ "saghen/blink.compat" },
-	},
-	opts = {
-		sources = {
-			default = {
-				"go_deep",
-			},
-			providers = {
-				go_deep = {
-					name = "go_deep",
-					module = "blink.compat.source",
-					min_keyword_length = 3,
-					max_items = 5,
-					---@module "cmp_go_deep"
-					---@type cmp_go_deep.Options
-					opts = {
-						-- See below for configuration options
-					},
-				},
-			},
-		},
-	},
+    "saghen/blink.cmp",
+    dependencies = {
+        { "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
+        { "saghen/blink.compat" },
+    },
+    opts = {
+        sources = {
+            default = {
+                "go_deep",
+            },
+            providers = {
+                go_deep = {
+                    name = "go_deep",
+                    module = "blink.compat.source",
+                    min_keyword_length = 3,
+                    max_items = 5,
+                    ---@module "cmp_go_deep"
+                        ---@type cmp_go_deep.Options
+                        opts = {
+                            -- See below for configuration options
+                        },
+                },
+            },
+        },
+    },
 }
 <
 
