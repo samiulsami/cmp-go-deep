@@ -62,12 +62,12 @@ local function test_db()
 		end
 	end
 
-	print("Testing load operations...")
-	local results = db:load("Sym", true)
+	print("Rudimentary db corruption check:")
+	local results = db:load("Sym", "fuzzy")
 	print(string.format("Loaded %d results for 'Sym'", #results))
 
-	results = db:load("test", false)
-	print(string.format("Loaded %d results for 'test' (fuzzy)", #results))
+	results = db:load("test", "fuzzy")
+	print(string.format("Loaded %d results for 'test'", #results))
 
 	print("DB stress test completed successfully!")
 end
