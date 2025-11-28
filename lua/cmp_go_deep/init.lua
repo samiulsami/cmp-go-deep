@@ -3,28 +3,24 @@ local gopls = require("cmp_go_deep.gopls")
 
 ---@class cmp_go_deep.Options
 ---@field public notifications boolean | nil whether to show notifications. default: true
----@field public matching_strategy "substring" | "fuzzy" | "substring_fuzzy_fallback" | nil how to match symbols. default: "substring_fuzzy_fallback"
 ---@field public filetypes string[] | nil filetypes to enable the source for
 ---@field public get_documentation_implementation "hover" | "regex" | nil how to get documentation. default: "regex"
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
 ---@field public exclude_vendored_packages boolean | nil whether to exclude vendored packages. default: false
 ---@field public documentation_wait_timeout_ms integer | nil maximum time (in milliseconds) to wait for fetching documentation. default: 100
 ---@field public debounce_gopls_requests_ms integer | nil time to wait before "locking-in" the current request and sending it to gopls. default: 0
----@field public debounce_cache_requests_ms integer | nil time to wait before "locking-in" the current request and loading data from cache. default: 0
 ---@field public db_path string | nil where to store the sqlite db. default: ~/.local/share/nvim/cmp_go_deep.sqlite3
 ---@field public debug boolean | nil whether to enable debug logging. default: false
 
 ---@type cmp_go_deep.Options
 local default_options = {
 	notifications = true,
-	matching_strategy = "substring_fuzzy_fallback",
 	filetypes = { "go" },
 	get_documentation_implementation = "regex",
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
 	documentation_wait_timeout_ms = 100,
 	debounce_gopls_requests_ms = 0,
-	debounce_cache_requests_ms = 0,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",
 	debug = false,
 }
@@ -96,10 +92,6 @@ source.complete = function(_, params, callback)
 			utils.debounce(gopls.workspace_symbols, source.opts.debounce_gopls_requests_ms)
 	end
 
-	if not utils.debounced_process_symbols then
-		utils.debounced_process_symbols = utils.debounce(utils.process_symbols, source.opts.debounce_cache_requests_ms)
-	end
-
 	---@type table<string, boolean>
 	local processed_items = {}
 
@@ -109,32 +101,33 @@ source.complete = function(_, params, callback)
 	local project_path_prefix = "file://" .. project_path .. "/"
 
 	local cached_items = {}
-	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "substring" then
-		cached_items = source.cache:load(cursor_prefix_word, true)
-	end
-
-	if source.opts.matching_strategy == "substring_fuzzy_fallback" or source.opts.matching_strategy == "fuzzy" then
-		-- Progressive suffix removal for fuzzy matching
-		-- Example: "HandlerFunc" -> "HandlerFun" -> ... -> "HandlerF"
-		local iter = 13
-		local tmp_cursor_prefix_word = cursor_prefix_word
-		while #cached_items == 0 and iter > 0 and #tmp_cursor_prefix_word > 0 do
-			cached_items = source.cache:load(tmp_cursor_prefix_word, false)
-			iter = iter - 1
-			tmp_cursor_prefix_word = tmp_cursor_prefix_word:sub(1, #tmp_cursor_prefix_word - 1)
-		end
-	end
-
-	utils:debounced_process_symbols(
+	cached_items = utils:process_symbols(
 		source.opts,
 		bufnr,
-		callback,
 		vendor_path_prefix,
 		project_path_prefix,
-		cached_items,
-		processed_items,
-		true
+		source.cache:load(cursor_prefix_word, "name_lower"),
+		processed_items
 	)
+
+	-- Progressive suffix removal for fuzzy matching
+	-- Example: "HandlerFunc" -> "HandlerFun" -> ... -> "HandlerF"
+	local iter = 13
+	local tmp_cursor_prefix_word = string.lower(cursor_prefix_word)
+	while #cached_items == 0 and iter > 0 and #tmp_cursor_prefix_word > 0 do
+		cached_items = utils:process_symbols(
+			source.opts,
+			bufnr,
+			vendor_path_prefix,
+			project_path_prefix,
+			source.cache:load(tmp_cursor_prefix_word, "fuzzy"),
+			processed_items
+		)
+		iter = iter - 1
+		tmp_cursor_prefix_word = tmp_cursor_prefix_word:sub(1, #tmp_cursor_prefix_word - 1)
+	end
+
+	callback({ items = cached_items, isIncomplete = true })
 
 	gopls.debounced_workspace_symbols(source.opts, gopls_client, bufnr, cursor_prefix_word, function(result)
 		if not result or #result == 0 then
@@ -157,40 +150,45 @@ source.complete = function(_, params, callback)
 					symbol.isLocal = true
 					symbol.location.uri = symbol.location.uri:sub(#project_path_prefix + 1)
 				end
-				symbol.fuzzy_text = cursor_prefix_word
+				symbol.fuzzy_text = string.lower(cursor_prefix_word)
+				symbol.name_lower = string.lower(symbol.name)
 				table.insert(filtered_result, symbol)
 			end
 		end
 
 		source.cache:save(utils, filtered_result)
+
 		local items = {}
-		if
-			source.opts.matching_strategy == "substring_fuzzy_fallback"
-			or source.opts.matching_strategy == "substring"
-		then
-			items = source.cache:load(cursor_prefix_word, true)
-		end
-
-		if
-			#items == 0
-			and (
-				source.opts.matching_strategy == "substring_fuzzy_fallback"
-				or source.opts.matching_strategy == "fuzzy"
-			)
-		then
-			items = vim.tbl_extend("force", items, filtered_result)
-		end
-
-		utils:debounced_process_symbols(
-			source.opts,
-			bufnr,
-			callback,
-			vendor_path_prefix,
-			project_path_prefix,
+		items = vim.tbl_extend(
+			"force",
 			items,
-			processed_items,
-			true
+			utils:process_symbols(
+				source.opts,
+				bufnr,
+				vendor_path_prefix,
+				project_path_prefix,
+				source.cache:load(cursor_prefix_word, "fuzzy"),
+				processed_items
+			),
+			utils:process_symbols(
+				source.opts,
+				bufnr,
+				vendor_path_prefix,
+				project_path_prefix,
+				source.cache:load(cursor_prefix_word, "name_lower"),
+				processed_items
+			),
+			utils:process_symbols(
+				source.opts,
+				bufnr,
+				vendor_path_prefix,
+				project_path_prefix,
+				source.cache:load(cursor_prefix_word, "name"),
+				processed_items
+			)
 		)
+
+		callback({ items = items, isIncomplete = #items ~= 0 })
 	end)
 end
 

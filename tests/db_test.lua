@@ -17,6 +17,7 @@ local function generate_fake_symbols(n)
 		local name = "Sym_" .. random_string(math.random(3, 60)) .. tostring(i)
 		local symbol = {
 			name = name,
+			name_lower = string.lower(name),
 			kind = math.random(1, 25),
 			containerName = "pkg" .. tostring(i % 100),
 			location = {
@@ -36,8 +37,7 @@ local function test_db()
 	print("Starting DB stress test...")
 	math.randomseed(os.time())
 
-	local test_db_path = vim.fn.stdpath("data") .. "/cmp_go_deep_test.sqlite3"
-	vim.fn.delete(test_db_path)
+	local test_db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3"
 
 	local opts = {
 		db_path = test_db_path,
@@ -50,7 +50,7 @@ local function test_db()
 		error("Failed to initialize DB")
 	end
 
-	local total = 100000
+	local total = 200000
 	local batch_size = 100
 	print(string.format("Inserting %d symbols in batches of %d...", total, batch_size))
 
@@ -69,7 +69,6 @@ local function test_db()
 	results = db:load("test", false)
 	print(string.format("Loaded %d results for 'test' (fuzzy)", #results))
 
-	vim.fn.delete(test_db_path)
 	print("DB stress test completed successfully!")
 end
 

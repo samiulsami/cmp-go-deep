@@ -71,14 +71,6 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
         Enable/disable notifications.
         Default: `true`
 
-    • `matching_strategy`
-        Symbol matching strategy.
-        Options:
-            "substring" - exact match on symbol name substrings.
-            "fuzzy" - fuzzy match on package/container/symbol names.
-            "substring_fuzzy_fallback" - try "substring" match, then fallback to "fuzzy".
-        Default: `"substring_fuzzy_fallback"`
-
     • `filetypes`
         Filetypes to enable the source for.
         Default: `{"go"}`
@@ -104,14 +96,10 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
     • `documentation_wait_timeout_ms`
         Timeout in milliseconds for fetching documentation.
         Controls how long to wait for documentation to load.
-        Default: `100` (0.5 seconds)
+        Default: `100`
 
     • `debounce_gopls_requests_ms`
         Timeout in milliseconds for "locking-in" the current request and sending it to gopls.
-        Default: 0
-
-    • `debounce_cache_requests_ms`
-        Timeout in milliseconds for "locking-in" the current request and loading data from cache.
         Default: 0
 
     • `db_path`

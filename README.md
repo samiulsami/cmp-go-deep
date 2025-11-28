@@ -86,13 +86,6 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	-- Enable/disable notifications.
 	notifications = true,
 
-	-- Symbol matching strategy.
-	-- options:
-	-- "substring" - exact match on symbol name substrings.
-	-- "fuzzy" - fuzzy match on package/container/symbol names.
-	-- "substring_fuzzy_fallback" - try "substring" match, then fallback to "fuzzy".
-	matching_strategy =  "substring_fuzzy_fallback",
-
 	-- Filetypes to enable the source for.
 	filetypes = { "go" },
 
@@ -117,9 +110,6 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 
 	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and sending it to gopls.
 	debounce_gopls_requests_ms = 0
-
-	-- Maximum time (in milliseconds) to wait before "locking-in" the current request and loading data from cache.
-	debounce_cache_requests_ms = 0
 
 	-- Path to store the SQLite database
 	-- Default: "~/.local/share/nvim/cmp_go_deep.sqlite3"
