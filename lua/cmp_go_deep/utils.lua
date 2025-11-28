@@ -13,8 +13,8 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
 ---@field deterministic_symbol_hash fun(symbol: lsp.SymbolInformation): string
----@field process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, callback: any, vendor_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>, isIncomplete: boolean): nil
----@field debounced_process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, callback: any, vendor_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>, isIncomplete: boolean): nil
+---@field process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, vendor_path_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>): table
+---@field debounced_process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, vendor_path_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>): table
 local utils = {}
 
 local symbol_to_completion_kind = {
@@ -246,22 +246,12 @@ end
 
 ---@param opts cmp_go_deep.Options
 ---@param bufnr integer
----@param callback any
 ---@param vendor_path_prefix string
 ---@param project_path_prefix string
 ---@param symbols table
 ---@param processed_items table<string, boolean>
----@param isIncomplete boolean
-function utils:process_symbols(
-	opts,
-	bufnr,
-	callback,
-	vendor_path_prefix,
-	project_path_prefix,
-	symbols,
-	processed_items,
-	isIncomplete
-)
+---@return table
+function utils:process_symbols(opts, bufnr, vendor_path_prefix, project_path_prefix, symbols, processed_items)
 	local items = {}
 	local package_name_cache = {}
 	local imported_paths = utils.get_imported_paths(opts, bufnr)
@@ -331,7 +321,7 @@ function utils:process_symbols(
 		::continue::
 	end
 
-	return callback({ items = items, isIncomplete = isIncomplete })
+	return items
 end
 
 return utils
