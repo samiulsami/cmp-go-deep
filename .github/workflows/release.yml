@@ -2,13 +2,10 @@ name: Release
 
 on:
   push:
-    tags:
-      - "*.*.*"
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -16,34 +13,8 @@ permissions:
 
 jobs:
   release:
-    name: Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: softprops/action-gh-release@v2
         with:
-          fetch-depth: 0
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          PREVIOUS_TAG=$(git tag --sort=-creatordate | sed -n '2p')
-          if [ -z "$PREVIOUS_TAG" ]; then
-            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
-          fi
-          
-          echo "## Changes" > changelog.md
-          echo "" >> changelog.md
-          git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges >> changelog.md
-          
-          echo "Generated changelog:"
-          cat changelog.md
-
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          body_path: changelog.md
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: true
