@@ -169,22 +169,6 @@ source.complete = function(_, params, callback)
 				project_path_prefix,
 				source.cache:load(cursor_prefix_word, "fuzzy"),
 				processed_items
-			),
-			utils:process_symbols(
-				source.opts,
-				bufnr,
-				vendor_path_prefix,
-				project_path_prefix,
-				source.cache:load(cursor_prefix_word, "name_lower"),
-				processed_items
-			),
-			utils:process_symbols(
-				source.opts,
-				bufnr,
-				vendor_path_prefix,
-				project_path_prefix,
-				source.cache:load(cursor_prefix_word, "name"),
-				processed_items
 			)
 		)
 
