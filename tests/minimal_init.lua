@@ -25,4 +25,6 @@ clone_plugin("saghen/blink.compat", "blink.compat")
 clone_plugin("neovim/nvim-lspconfig", "nvim-lspconfig")
 clone_plugin("nvim-treesitter/nvim-treesitter", "nvim-treesitter")
 
-require("nvim-treesitter").install({ "go" })
+vim.opt.runtimepath:prepend(vim.fn.stdpath("data") .. "/site")
+
+require("nvim-treesitter").install({ "go" }):wait()

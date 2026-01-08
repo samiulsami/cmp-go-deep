@@ -33,6 +33,9 @@ jobs:
       - name: Install gopls
         run: go install golang.org/x/tools/gopls@latest
 
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
       - name: Run tests
         run: |
           nvim --version
