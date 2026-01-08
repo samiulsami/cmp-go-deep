@@ -39,3 +39,4 @@ jobs:
           nvim --headless -u tests/minimal_init.lua -c "luafile tests/completion_test.lua" -c "qa"
           nvim --headless -u tests/minimal_init.lua -c "luafile tests/import_test.lua" -c "qa"
           nvim --headless -u tests/minimal_init.lua -c "luafile tests/db_test.lua" -c "qa"
+          nvim --headless -u tests/minimal_init.lua -c "luafile tests/internal_test.lua" -c "qa"
