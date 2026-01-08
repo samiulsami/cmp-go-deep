@@ -225,6 +225,30 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 	return nil, true
 end
 
+---@param path string
+---@return boolean
+utils.is_internal_package = function(path)
+	return path:match("^internal/") or path:match("/internal/") or path:match("/internal$") or path == "internal"
+end
+
+--- Go rule: code can import internal only if it's in a subtree rooted at the parent of "internal"
+---@param symbol_file_path string
+---@param current_file_path string
+---@return boolean
+utils.can_import_internal = function(symbol_file_path, current_file_path)
+	if not utils.is_internal_package(symbol_file_path) then
+		return true
+	end
+
+	local internal_parent = symbol_file_path:match("^(.-)/internal/") or symbol_file_path:match("^(.-)/internal$")
+	if not internal_parent or internal_parent == "" then
+		return false
+	end
+
+	local current_dir = vim.fn.fnamemodify(current_file_path, ":h")
+	return current_dir == internal_parent or current_dir:sub(1, #internal_parent + 1) == internal_parent .. "/"
+end
+
 ---@param symbol lsp.SymbolInformation
 ---@return string
 utils.deterministic_symbol_hash = function(symbol)
@@ -264,6 +288,7 @@ function utils:process_symbols(opts, bufnr, vendor_path_prefix, project_path_pre
 
 	local current_buf_uri = vim.uri_from_bufnr(bufnr)
 	local current_buf_dir = vim.fn.fnamemodify(current_buf_uri, ":h")
+	local current_file_path = vim.uri_to_fname(current_buf_uri)
 
 	---TODO: better type checking and error handling
 	for _, symbol in ipairs(symbols) do
@@ -277,6 +302,17 @@ function utils:process_symbols(opts, bufnr, vendor_path_prefix, project_path_pre
 			symbol.location.uri = vendor_path_prefix .. symbol.location.uri
 		elseif symbol.isLocal then
 			symbol.location.uri = project_path_prefix .. symbol.location.uri
+		end
+
+		if opts.exclude_internal_packages then
+			if symbol.isLocal then
+				local symbol_file_path = vim.uri_to_fname(symbol.location.uri)
+				if not utils.can_import_internal(symbol_file_path, current_file_path) then
+					goto continue
+				end
+			elseif utils.is_internal_package(symbol.containerName) then
+				goto continue
+			end
 		end
 
 		local symbol_dir = vim.fn.fnamemodify(symbol.location.uri, ":h")

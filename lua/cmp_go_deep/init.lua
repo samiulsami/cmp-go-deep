@@ -7,6 +7,7 @@ local gopls = require("cmp_go_deep.gopls")
 ---@field public get_documentation_implementation "hover" | "regex" | nil how to get documentation. default: "regex"
 ---@field public get_package_name_implementation "treesitter" | "regex" | nil how to get package name (treesitter = slow but accurate | regex = fast but fails edge cases). default: "regex"
 ---@field public exclude_vendored_packages boolean | nil whether to exclude vendored packages. default: false
+---@field public exclude_internal_packages boolean | nil whether to exclude internal packages that cannot be imported. default: true
 ---@field public documentation_wait_timeout_ms integer | nil maximum time (in milliseconds) to wait for fetching documentation. default: 100
 ---@field public debounce_gopls_requests_ms integer | nil time to wait before "locking-in" the current request and sending it to gopls. default: 0
 ---@field public db_path string | nil where to store the sqlite db. default: ~/.local/share/nvim/cmp_go_deep.sqlite3
@@ -19,6 +20,7 @@ local default_options = {
 	get_documentation_implementation = "regex",
 	get_package_name_implementation = "regex",
 	exclude_vendored_packages = false,
+	exclude_internal_packages = true,
 	documentation_wait_timeout_ms = 100,
 	debounce_gopls_requests_ms = 0,
 	db_path = vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3",

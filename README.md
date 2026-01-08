@@ -104,6 +104,11 @@ Query  ```gopls's``` ```workspace/symbol``` endpoint, cache the results using ``
 	-- Whether to exclude vendored packages from completions.
 	exclude_vendored_packages = false,
 
+	-- Whether to exclude internal packages that cannot be imported.
+	-- Follows Go's internal package rule: code can only import from "internal"
+	-- if it's in a subtree rooted at the parent of "internal".
+	exclude_internal_packages = true,
+
 	-- Timeout in milliseconds for fetching documentation.
 	-- Controls how long to wait for documentation to load.
 	documentation_wait_timeout_ms = 100,
