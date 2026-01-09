@@ -13,7 +13,7 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
 ---@field deterministic_symbol_hash fun(symbol: lsp.SymbolInformation): string
----@field process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, vendor_path_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>): table
+---@field process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, vendor_path_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>, on_reject: fun(rejected: table)|nil): table
 ---@field debounced_process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, vendor_path_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>): table
 local utils = {}
 
@@ -274,9 +274,19 @@ end
 ---@param project_path_prefix string
 ---@param symbols table
 ---@param processed_items table<string, boolean>
+---@param on_reject fun(rejected: table)|nil
 ---@return table
-function utils:process_symbols(opts, bufnr, vendor_path_prefix, project_path_prefix, symbols, processed_items)
+function utils:process_symbols(
+	opts,
+	bufnr,
+	vendor_path_prefix,
+	project_path_prefix,
+	symbols,
+	processed_items,
+	on_reject
+)
 	local items = {}
+	local rejected_items = {}
 	local package_name_cache = {}
 	local imported_paths = utils.get_imported_paths(opts, bufnr)
 
@@ -308,9 +318,11 @@ function utils:process_symbols(opts, bufnr, vendor_path_prefix, project_path_pre
 			if symbol.isLocal then
 				local symbol_file_path = vim.uri_to_fname(symbol.location.uri)
 				if not utils.can_import_internal(symbol_file_path, current_file_path) then
+					rejected_items[#rejected_items + 1] = symbol
 					goto continue
 				end
 			elseif utils.is_internal_package(symbol.containerName) then
+				rejected_items[#rejected_items + 1] = symbol
 				goto continue
 			end
 		end
@@ -327,6 +339,7 @@ function utils:process_symbols(opts, bufnr, vendor_path_prefix, project_path_pre
 		then
 			local package_name, file_exists = utils.get_package_name(opts, symbol.location.uri, package_name_cache)
 			if not file_exists then
+				rejected_items[#rejected_items + 1] = symbol
 				goto continue
 			end
 
@@ -334,6 +347,7 @@ function utils:process_symbols(opts, bufnr, vendor_path_prefix, project_path_pre
 				package_name = symbol.containerName:match("([^/]+)$"):gsub("-", "_")
 			end
 			if not package_name then
+				rejected_items[#rejected_items + 1] = symbol
 				goto continue
 			end
 
@@ -352,9 +366,17 @@ function utils:process_symbols(opts, bufnr, vendor_path_prefix, project_path_pre
 				detail = '"' .. symbol.containerName .. '"',
 				data = symbol,
 			})
+		else
+			rejected_items[#rejected_items + 1] = symbol
 		end
 
 		::continue::
+	end
+
+	if on_reject and #rejected_items > 0 then
+		vim.schedule(function()
+			on_reject(rejected_items)
+		end)
 	end
 
 	return items

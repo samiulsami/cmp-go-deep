@@ -102,14 +102,18 @@ source.complete = function(_, params, callback)
 	local vendor_path_prefix = "file://" .. project_path .. "/vendor/"
 	local project_path_prefix = "file://" .. project_path .. "/"
 
-	local cached_items = {}
-	cached_items = utils:process_symbols(
+	local on_reject = function(rejected)
+		source.cache:delete(utils, rejected)
+	end
+
+	local cached_items = utils:process_symbols(
 		source.opts,
 		bufnr,
 		vendor_path_prefix,
 		project_path_prefix,
 		source.cache:load(cursor_prefix_word, "name_lower"),
-		processed_items
+		processed_items,
+		on_reject
 	)
 
 	-- Progressive suffix removal for fuzzy matching
@@ -123,7 +127,8 @@ source.complete = function(_, params, callback)
 			vendor_path_prefix,
 			project_path_prefix,
 			source.cache:load(tmp_cursor_prefix_word, "fuzzy"),
-			processed_items
+			processed_items,
+			on_reject
 		)
 		iter = iter - 1
 		tmp_cursor_prefix_word = tmp_cursor_prefix_word:sub(1, #tmp_cursor_prefix_word - 1)
@@ -160,21 +165,20 @@ source.complete = function(_, params, callback)
 
 		source.cache:save(utils, filtered_result)
 
-		local items = {}
-		items = vim.tbl_extend(
-			"force",
-			items,
-			utils:process_symbols(
-				source.opts,
-				bufnr,
-				vendor_path_prefix,
-				project_path_prefix,
-				source.cache:load(cursor_prefix_word, "fuzzy"),
-				processed_items
-			)
-		)
+		if #cached_items > 0 then
+			return
+		end
 
-		callback({ items = items, isIncomplete = #items ~= 0 })
+		local items = utils:process_symbols(
+			source.opts,
+			bufnr,
+			vendor_path_prefix,
+			project_path_prefix,
+			source.cache:load(cursor_prefix_word, "fuzzy"),
+			processed_items,
+			on_reject
+		)
+		callback({ items = items, isIncomplete = false })
 	end)
 end
 

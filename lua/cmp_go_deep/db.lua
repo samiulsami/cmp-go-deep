@@ -7,6 +7,7 @@ local math = require("math")
 ---@field public setup fun(opts: cmp_go_deep.Options): cmp_go_deep.DB?
 ---@field public load fun(self, query_string: string, match_strategy: string | "fuzzy" | "name" | "name_lower"): table
 ---@field public save fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
+---@field public delete fun(self, utils: cmp_go_deep.utils, symbols: table): nil
 ---@field private load_by_name_stmt sqlstmt
 ---@field private load_by_name_lower_stmt sqlstmt
 ---@field private load_by_fuzzy_text_stmt sqlstmt
@@ -25,8 +26,8 @@ local DB = {
 	MAX_DB_SIZE_BYTES = 100 * 1024 * 1024,
 	PRUNE_PERCENTAGE_THRESHOLD = 0.8,
 }
-local SCHEMA_VERSION = "v0.1.0"
-local MAX_SYMBOLS_TO_LOAD = 75
+local SCHEMA_VERSION = "v0.1.1"
+local MAX_SYMBOLS_TO_LOAD = 100
 
 --- @return string version_tag
 local function detect_version_tag()
@@ -65,9 +66,9 @@ function DB.setup(opts)
 	if type(res) ~= "table" or #res == 0 or res[1].version ~= SCHEMA_VERSION then
 		DB.db:eval("DELETE FROM meta")
 		DB.db:eval("INSERT INTO meta (version) VALUES ('" .. SCHEMA_VERSION .. "')")
-		DB.db:eval("DROP TABLE IF EXISTS versions")
-		DB.db:eval("DROP TABLE IF EXISTS gosymbols")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
+		DB.db:eval("DROP TABLE IF EXISTS gosymbols")
+		DB.db:eval("DROP TABLE IF EXISTS versions")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbol_cache")
 		DB.db:eval("VACUUM;")
 		DB.db:eval("PRAGMA wal_checkpoint(TRUNCATE);")
@@ -210,6 +211,20 @@ function DB.setup(opts)
 		]]
 	)
 
+	DB.delete_by_hash_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+		    DELETE FROM gosymbols WHERE hash = ?;
+		]]
+	)
+
+	DB.delete_fts_by_hash_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+		    DELETE FROM gosymbols_fts WHERE id = (SELECT id FROM gosymbols WHERE hash = ?);
+		]]
+	)
+
 	return DB
 end
 
@@ -265,6 +280,9 @@ function DB:prune()
 	end
 
 	local row_count = res[1].count
+	if row_count <= 0 then
+		return
+	end
 	local bytes_per_row = current_db_size / row_count
 	local rows_to_delete = math.min(row_count, math.ceil(bytes_to_free / bytes_per_row))
 
@@ -375,6 +393,55 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 	vim.schedule(function()
 		self:prune()
 	end)
+end
+
+---@param utils cmp_go_deep.utils
+---@param symbols table
+function DB:delete(utils, symbols)
+	if #symbols == 0 then
+		return
+	end
+
+	if not self.db:eval("BEGIN TRANSACTION;") then
+		if self.notifications then
+			vim.notify("[sqlite] failed to begin transaction", vim.log.levels.ERROR)
+		end
+		return
+	end
+
+	---@param msg string
+	local rollback = function(msg)
+		if self.notifications then
+			vim.notify("[sqlite] " .. msg, vim.log.levels.ERROR)
+		end
+		self.db:eval("PRAGMA wal_checkpoint(RESTART);")
+		self.db:eval("PRAGMA incremental_vacuum;")
+		self.db:eval("ROLLBACK;")
+	end
+
+	for _, symbol in ipairs(symbols) do
+		local hash = utils.deterministic_symbol_hash(symbol)
+
+		self.delete_fts_by_hash_stmt:bind({ hash })
+		if self.delete_fts_by_hash_stmt:step() ~= sqlite.flags["done"] then
+			return rollback("failed to delete gosymbols_fts row")
+		end
+		if self.delete_fts_by_hash_stmt:reset() ~= sqlite.flags["ok"] then
+			return rollback("failed to reset delete_fts_by_hash_stmt")
+		end
+
+		self.delete_by_hash_stmt:bind({ hash })
+		if self.delete_by_hash_stmt:step() ~= sqlite.flags["done"] then
+			return rollback("failed to delete gosymbols row")
+		end
+		if self.delete_by_hash_stmt:reset() ~= sqlite.flags["ok"] then
+			return rollback("failed to reset delete_by_hash_stmt")
+		end
+	end
+
+	if not self.db:eval("END TRANSACTION;") then
+		return rollback("failed to end transaction")
+	end
 end
 
 return DB
