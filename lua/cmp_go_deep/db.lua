@@ -16,6 +16,12 @@ local math = require("math")
 ---@field private last_insert_rowid_stmt sqlstmt
 ---@field private delete_fts_stmt sqlstmt
 ---@field private delete_gosymbols_stmt sqlstmt
+---@field private delete_by_hash_stmt sqlstmt
+---@field private delete_fts_by_hash_stmt sqlstmt
+---@field private db_size_stmt sqlstmt
+---@field private row_count_stmt sqlstmt
+---@field private orphan_count_stmt sqlstmt
+---@field private delete_orphan_fts_stmt sqlstmt
 ---@field private db sqlite_db
 ---@field private db_path string
 ---@field private notifications boolean
@@ -225,6 +231,26 @@ function DB.setup(opts)
 		]]
 	)
 
+	-- Prepared statements for prune()
+	DB.db_size_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();]]
+	)
+
+	DB.row_count_stmt = sqlstmt:parse(DB.db.conn, [[SELECT COUNT(*) as count FROM gosymbols;]])
+
+	DB.orphan_count_stmt = sqlstmt:parse(
+		DB.db.conn,
+		[[
+		    SELECT
+		        (SELECT COUNT(*) FROM gosymbols_fts) as fts,
+		        (SELECT COUNT(*) FROM gosymbols) as main;
+		]]
+	)
+
+	DB.delete_orphan_fts_stmt =
+		sqlstmt:parse(DB.db.conn, [[DELETE FROM gosymbols_fts WHERE id NOT IN (SELECT id FROM gosymbols);]])
+
 	return DB
 end
 
@@ -251,15 +277,16 @@ end
 
 ---@return nil
 function DB:prune()
-	local res = self.db:eval("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();")
-	if type(res) ~= "table" or #res == 0 then
+	if self.db_size_stmt:step() ~= sqlite.flags["row"] then
 		if self.notifications then
 			vim.notify("[sqlite] error reading db size while pruning", vim.log.levels.ERROR)
 		end
+		self.db_size_stmt:reset()
 		return
 	end
+	local current_db_size = self.db_size_stmt:val(0)
+	self.db_size_stmt:reset()
 
-	local current_db_size = res[1].size
 	local prune_threshold = self.MAX_DB_SIZE_BYTES * self.PRUNE_PERCENTAGE_THRESHOLD
 	if current_db_size <= prune_threshold then
 		return
@@ -271,15 +298,16 @@ function DB:prune()
 		return
 	end
 
-	res = self.db:eval("SELECT COUNT(*) as count FROM gosymbols")
-	if type(res) ~= "table" or #res == 0 then
+	if self.row_count_stmt:step() ~= sqlite.flags["row"] then
 		if self.notifications then
 			vim.notify("[sqlite] error reading db row count during pruning", vim.log.levels.ERROR)
 		end
+		self.row_count_stmt:reset()
 		return
 	end
+	local row_count = self.row_count_stmt:val(0)
+	self.row_count_stmt:reset()
 
-	local row_count = res[1].count
 	if row_count <= 0 then
 		return
 	end
@@ -326,6 +354,21 @@ function DB:prune()
 	if not self.db:eval("END TRANSACTION;") then
 		return rollback("failed to end transaction")
 	end
+
+	-- Clean up orphaned FTS entries (caused by INSERT OR REPLACE deleting rows)
+	if self.orphan_count_stmt:step() == sqlite.flags["row"] then
+		local fts_count = self.orphan_count_stmt:val(0)
+		local main_count = self.orphan_count_stmt:val(1)
+		if fts_count > main_count then
+			if self.delete_orphan_fts_stmt:step() ~= sqlite.flags["done"] then
+				if self.notifications then
+					vim.notify("[sqlite] failed to delete orphan FTS entries", vim.log.levels.WARN)
+				end
+			end
+			self.delete_orphan_fts_stmt:reset()
+		end
+	end
+	self.orphan_count_stmt:reset()
 
 	self.db:eval("PRAGMA wal_checkpoint(TRUNCATE);")
 	self.db:eval("PRAGMA incremental_vacuum;")
