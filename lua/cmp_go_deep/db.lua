@@ -20,11 +20,18 @@ local math = require("math")
 ---@field private notifications boolean
 ---@field private MAX_DB_SIZE_BYTES number
 ---@field private PRUNE_PERCENTAGE_THRESHOLD number
+---@field private version_id integer
 local DB = {
 	MAX_DB_SIZE_BYTES = 100 * 1024 * 1024,
 	PRUNE_PERCENTAGE_THRESHOLD = 0.8,
 }
-local SCHEMA_VERSION = "0.0.12"
+local SCHEMA_VERSION = "v0.1.0"
+local MAX_SYMBOLS_TO_LOAD = 75
+
+--- @return string version_tag
+local function detect_version_tag()
+	return vim.fn.system("go version") .. "|" .. vim.fn.system("gopls version")
+end
 
 ---@param opts cmp_go_deep.Options
 ---@return cmp_go_deep.DB?
@@ -58,6 +65,7 @@ function DB.setup(opts)
 	if type(res) ~= "table" or #res == 0 or res[1].version ~= SCHEMA_VERSION then
 		DB.db:eval("DELETE FROM meta")
 		DB.db:eval("INSERT INTO meta (version) VALUES ('" .. SCHEMA_VERSION .. "')")
+		DB.db:eval("DROP TABLE IF EXISTS versions")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbol_cache")
@@ -67,18 +75,26 @@ function DB.setup(opts)
 
 	local tables = {
 		[[
-		    CREATE TABLE IF NOT EXISTS gosymbols (
-		      id INTEGER PRIMARY KEY AUTOINCREMENT,
-		      hash TEXT UNIQUE NOT NULL,
-		      data TEXT NOT NULL,
-		      last_modified INTEGER NOT NULL
-		    );
-	        ]],
+	    CREATE TABLE IF NOT EXISTS versions (
+	      id INTEGER PRIMARY KEY AUTOINCREMENT,
+	      version_tag TEXT UNIQUE NOT NULL
+	    );
+	]],
 
 		[[
-		    CREATE VIRTUAL TABLE IF NOT EXISTS gosymbols_fts
-		    USING fts5(name, name_lower, fuzzy_text, id, tokenize='trigram');
-		]],
+	    CREATE TABLE IF NOT EXISTS gosymbols (
+	      id INTEGER PRIMARY KEY AUTOINCREMENT,
+	      hash TEXT UNIQUE NOT NULL,
+	      data TEXT NOT NULL,
+	      last_modified INTEGER NOT NULL,
+	      version_id INTEGER NOT NULL REFERENCES versions(id)
+	    );
+        ]],
+
+		[[
+	    CREATE VIRTUAL TABLE IF NOT EXISTS gosymbols_fts
+	    USING fts5(name, name_lower, fuzzy_text, id, tokenize='trigram');
+	]],
 	}
 
 	for _, sql in ipairs(tables) do
@@ -100,46 +116,63 @@ function DB.setup(opts)
 
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_last_modified ON gosymbols (last_modified DESC);")
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_hash ON gosymbols (hash DESC);")
+	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_version_id ON gosymbols (version_id);")
 
-	DB.load_by_fuzzy_text_stmt = sqlstmt:parse(
-		DB.db.conn,
-		[[
-			SELECT gosymbols.data FROM gosymbols
-			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
-			WHERE gosymbols_fts.fuzzy_text LIKE '%' || ? || '%'
-			ORDER BY gosymbols.last_modified DESC
-			LIMIT 100;
-	]]
-	)
+	local version_tag = detect_version_tag()
+	local insert_version_stmt = sqlstmt:parse(DB.db.conn, "INSERT OR IGNORE INTO versions (version_tag) VALUES (?)")
+	insert_version_stmt:bind({ version_tag })
+	if insert_version_stmt:step() ~= sqlite.flags["done"] then
+		if DB.notifications then
+			vim.notify("[sqlite] failed to insert version_tag", vim.log.levels.ERROR)
+		end
+		return nil
+	end
+	insert_version_stmt:reset()
 
-	DB.load_by_name_stmt = sqlstmt:parse(
-		DB.db.conn,
-		[[
-			SELECT gosymbols.data FROM gosymbols
-			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
-			WHERE gosymbols_fts.name LIKE '%' || ? || '%'
-			ORDER BY gosymbols.last_modified DESC
-			LIMIT 100;
-	]]
-	)
+	local select_version_stmt = sqlstmt:parse(DB.db.conn, "SELECT id FROM versions WHERE version_tag = ?")
+	select_version_stmt:bind({ version_tag })
+	if select_version_stmt:step() ~= sqlite.flags["row"] then
+		if DB.notifications then
+			vim.notify("[sqlite] failed to get version_id", vim.log.levels.ERROR)
+		end
+		return nil
+	end
+	DB.version_id = select_version_stmt:val(0)
+	select_version_stmt:reset()
 
-	DB.load_by_name_lower_stmt = sqlstmt:parse(
-		DB.db.conn,
-		[[
-			SELECT gosymbols.data FROM gosymbols
-			JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
-			WHERE gosymbols_fts.name_lower LIKE '%' || ? || '%'
-			ORDER BY gosymbols.last_modified DESC
-			LIMIT 100;
-	]]
-	)
+	DB.load_by_fuzzy_text_stmt = sqlstmt:parse(DB.db.conn, [[
+		SELECT gosymbols.data FROM gosymbols
+		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
+		WHERE gosymbols.version_id = ?
+		AND gosymbols_fts.fuzzy_text LIKE '%' || ? || '%'
+		ORDER BY gosymbols.last_modified DESC
+		LIMIT ]] .. MAX_SYMBOLS_TO_LOAD .. [[;
+	]])
+
+	DB.load_by_name_stmt = sqlstmt:parse(DB.db.conn, [[
+		SELECT gosymbols.data FROM gosymbols
+		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
+		WHERE gosymbols.version_id = ?
+		AND gosymbols_fts.name LIKE '%' || ? || '%'
+		ORDER BY gosymbols.last_modified DESC
+		LIMIT ]] .. MAX_SYMBOLS_TO_LOAD .. [[;
+	]])
+
+	DB.load_by_name_lower_stmt = sqlstmt:parse(DB.db.conn, [[
+		SELECT gosymbols.data FROM gosymbols
+		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
+		WHERE gosymbols.version_id = ?
+		AND gosymbols_fts.name_lower LIKE '%' || ? || '%'
+		ORDER BY gosymbols.last_modified DESC
+		LIMIT ]] .. MAX_SYMBOLS_TO_LOAD .. [[;
+	]])
 
 	DB.insert_gosymbols_stmt = sqlstmt:parse(
 		DB.db.conn,
 		[[
-		    INSERT OR REPLACE INTO gosymbols (data, hash, last_modified)
-		    VALUES (?, ?, ?);
-		]]
+	    INSERT OR REPLACE INTO gosymbols (data, hash, last_modified, version_id)
+	    VALUES (?, ?, ?, ?);
+	]]
 	)
 
 	DB.last_insert_rowid_stmt = sqlstmt:parse(
@@ -190,7 +223,7 @@ function DB:load(query_string, match_strategy)
 	elseif match_strategy == "name_lower" then
 		stmt = self.load_by_name_lower_stmt
 	end
-	stmt:bind({ query_string })
+	stmt:bind({ self.version_id, query_string })
 
 	local ret = {}
 	stmt:kvrows(function(kv)
@@ -305,7 +338,7 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 		local encoded = vim.json.encode(symbol)
 		local hash = utils.deterministic_symbol_hash(symbol)
 
-		self.insert_gosymbols_stmt:bind({ encoded, hash, last_modified })
+		self.insert_gosymbols_stmt:bind({ encoded, hash, last_modified, self.version_id })
 		if self.insert_gosymbols_stmt:step() ~= sqlite.flags["done"] then
 			return rollback("failed to insert gosymbols row")
 		end
