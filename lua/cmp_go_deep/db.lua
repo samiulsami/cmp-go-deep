@@ -284,7 +284,7 @@ function DB:prune()
 		self.db_size_stmt:reset()
 		return
 	end
-	local current_db_size = self.db_size_stmt:val(0)
+	local current_db_size = tonumber(self.db_size_stmt:val(0))
 	self.db_size_stmt:reset()
 
 	local prune_threshold = self.MAX_DB_SIZE_BYTES * self.PRUNE_PERCENTAGE_THRESHOLD
@@ -305,10 +305,10 @@ function DB:prune()
 		self.row_count_stmt:reset()
 		return
 	end
-	local row_count = self.row_count_stmt:val(0)
+	local row_count = tonumber(self.row_count_stmt:val(0))
 	self.row_count_stmt:reset()
 
-	if row_count <= 0 then
+	if not row_count or row_count <= 0 then
 		return
 	end
 	local bytes_per_row = current_db_size / row_count
@@ -357,8 +357,8 @@ function DB:prune()
 
 	-- Clean up orphaned FTS entries (caused by INSERT OR REPLACE deleting rows)
 	if self.orphan_count_stmt:step() == sqlite.flags["row"] then
-		local fts_count = self.orphan_count_stmt:val(0)
-		local main_count = self.orphan_count_stmt:val(1)
+		local fts_count = tonumber(self.orphan_count_stmt:val(0))
+		local main_count = tonumber(self.orphan_count_stmt:val(1))
 		if fts_count > main_count then
 			if self.delete_orphan_fts_stmt:step() ~= sqlite.flags["done"] then
 				if self.notifications then
