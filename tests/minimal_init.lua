@@ -1,5 +1,6 @@
 local tmp_dir = vim.fn.stdpath("data") .. "/cmp-go-deep-test"
 vim.fn.mkdir(tmp_dir, "p")
+vim.opt.swapfile = false
 
 local plugin_dir = vim.fn.getcwd()
 
@@ -18,9 +19,6 @@ local function clone_plugin(repo, name)
 end
 
 clone_plugin("kkharji/sqlite.lua", "sqlite.lua")
-clone_plugin("hrsh7th/nvim-cmp", "nvim-cmp")
-clone_plugin("Saghen/blink.cmp", "blink.cmp")
-clone_plugin("saghen/blink.compat", "blink.compat")
 
 clone_plugin("neovim/nvim-lspconfig", "nvim-lspconfig")
 clone_plugin("nvim-treesitter/nvim-treesitter", "nvim-treesitter")

@@ -2,70 +2,30 @@ cmp_go_deep Options                                   *cmp_go_deep-options*
 ==============================================================================
 DESCRIPTION                                                    *cmp_go_deep-description*
 
-    This section describes the default options for the
-    |cmp_go_deep| Go source that provides deep symbol
-    completions for unimported packages.
-
-=============================================================================
-SETUP-nvim-cmp                                                 *cmp_go_deep-setup-nvim-cmp*
->lua
-{
-    "hrsh7th/nvim-cmp",
-    dependencies = {
-        { "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
-    },
-    ...
-    require("cmp").setup({
-        sources = {{
-            name = "go_deep",
-            keyword_length = 3,
-            max_item_count = 5,
-            ---@module "cmp_go_deep"
-            ---@type cmp_go_deep.Options
-            option = {
-                -- See below for configuration options
-            },
-        }},
-    })
-}
-<
+    Native Neovim completion for deep Go symbol lookup from
+    unimported packages.
 
 ==============================================================================
-SETUP-blink.cmp                                               *cmp_go_deep-setup-blink*
+SETUP-native                                                     *cmp_go_deep-setup-native*
 >lua
-{
-    "saghen/blink.cmp",
-    dependencies = {
-        { "samiulsami/cmp-go-deep", dependencies = { "kkharji/sqlite.lua" } },
-        { "saghen/blink.compat" },
-    },
-    opts = {
-        sources = {
-            default = {
-                "go_deep",
-            },
-            providers = {
-                go_deep = {
-                    name = "go_deep",
-                    module = "blink.compat.source",
-                    min_keyword_length = 3,
-                    max_items = 5,
-                    ---@module "cmp_go_deep"
-                        ---@type cmp_go_deep.Options
-                        opts = {
-                            -- See below for configuration options
-                        },
-                },
-            },
-        },
-    },
-}
+require("cmp_go_deep").setup({
+    debounce_gopls_requests_ms = 75,
+    native_min_keyword_length = 2,
+    native_max_items = 20,
+})
+
+vim.api.nvim_create_autocmd("LspAttach", {
+    callback = function(ev)
+        local client = vim.lsp.get_client_by_id(ev.data.client_id)
+        if client and client.name == "gopls" and vim.bo[ev.buf].filetype == "go" then
+            require("cmp_go_deep").attach_to_buffer(ev.buf)
+        end
+    end,
+})
 <
 
 ==============================================================================
 DEFAULT OPTIONS                                                *cmp_go_deep-default-options*
-
-    The following options can be configured:
 
     • `notifications`
         Enable/disable notifications.
@@ -75,15 +35,8 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
         Filetypes to enable the source for.
         Default: `{"go"}`
 
-    • `get_documentation_implementation`
-        How to get documentation for Go symbols.
-        Options:
-            "hover" - LSP 'textDocument/hover'. Prettier.
-            "regex" - faster and simpler.
-        Default: `"regex"`
-
     • `get_package_name_implementation`
-        How to get the package names.
+        How to determine package names.
         Options:
             "treesitter" - accurate but slower.
             "regex" - faster but can fail in edge cases.
@@ -95,22 +48,31 @@ DEFAULT OPTIONS                                                *cmp_go_deep-defa
 
     • `exclude_internal_packages`
         Whether to exclude internal packages that cannot be imported.
-        Follows Go's internal package rule: code can only import from
-        "internal" if it's in a subtree rooted at the parent of "internal".
         Default: `true`
 
-    • `documentation_wait_timeout_ms`
-        Timeout in milliseconds for fetching documentation.
-        Controls how long to wait for documentation to load.
-        Default: `100`
-
     • `debounce_gopls_requests_ms`
-        Timeout in milliseconds for "locking-in" the current request and sending it to gopls.
-        Default: 0
+        Debounce before async `workspace/symbol` requests.
+        Default: `75`
 
     • `db_path`
-        Path to store the SQLite database.
+        Path to the SQLite database.
         Default: `vim.fn.stdpath("data") .. "/cmp_go_deep.sqlite3"`
+
+    • `native_min_keyword_length`
+        Minimum prefix length before native completion participates.
+        Default: `3`
+
+    • `native_max_items`
+        Maximum number of native completion items returned.
+        Default: `10`
+
 ==============================================================================
+FLOW                                                              *cmp_go_deep-flow*
+
+    1. `attach_to_buffer()` installs `completefunc` and autocommands.
+    2. Insert-mode changes trigger async `workspace/symbol` prefetch.
+    3. Results are normalized and stored in sqlite.
+    4. `completefunc()` serves cached native items.
+    5. `CompleteDone` inserts the missing import for the accepted item.
 
 vim:tw=80:ts=4:ft=help:norl:

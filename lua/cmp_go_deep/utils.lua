@@ -1,4 +1,3 @@
-local gopls = require("cmp_go_deep.gopls")
 local treesitter = require("cmp_go_deep.treesitter")
 local completionItemKind = vim.lsp.protocol.CompletionItemKind
 
@@ -8,7 +7,7 @@ local completionItemKind = vim.lsp.protocol.CompletionItemKind
 ---@field get_cursor_prefix_word fun(win_id: integer): string
 ---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, package_alias: string): string
 ---@field get_gopls_client fun(): vim.lsp.Client|nil
----@field get_documentation fun(opts: cmp_go_deep.Options, uri: string, range: lsp.Range): string|nil
+---@field get_documentation fun(uri: string, range: lsp.Range): string
 ---@field get_imported_paths fun(opts: cmp_go_deep.Options, bufnr: integer): table<string, string>
 ---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
@@ -74,25 +73,20 @@ utils.get_cursor_prefix_word = function(win_id)
 	return line:sub(start_col, end_col)
 end
 
+---@param bufnr? integer
 ---@return vim.lsp.Client | nil
-utils.get_gopls_client = function()
-	local gopls_clients = vim.lsp.get_clients({ name = "gopls" })
+utils.get_gopls_client = function(bufnr)
+	local gopls_clients = vim.lsp.get_clients({ name = "gopls", bufnr = bufnr })
 	if #gopls_clients > 0 then
 		return gopls_clients[1]
 	end
 	return nil
 end
 
----@param opts cmp_go_deep.Options
 ---@param uri string
 ---@param range lsp.Range
----@return string | nil
-utils.get_documentation = function(opts, uri, range)
-	if opts.get_documentation_implementation == "hover" then
-		return gopls.get_documentation(opts, utils.get_gopls_client(), uri, range)
-	end
-
-	--default to regex
+---@return string
+utils.get_documentation = function(uri, range)
 	local filepath = vim.uri_to_fname(uri)
 	local bufnr = vim.fn.bufadd(filepath)
 	vim.fn.bufload(bufnr)
@@ -115,7 +109,7 @@ utils.get_documentation = function(opts, uri, range)
 	end
 
 	if vim.tbl_isempty(doc_lines) then
-		return nil
+		return ""
 	end
 
 	local ft = vim.bo[bufnr].filetype
