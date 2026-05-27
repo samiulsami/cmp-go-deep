@@ -42,7 +42,6 @@ local function start_gopls()
 		cmd = { "gopls" },
 		name = "gopls",
 		root_dir = test_project,
-		filetypes = { "go", "gomod", "gowork" },
 		settings = { gopls = { completeUnimported = true } },
 	})
 
@@ -78,25 +77,24 @@ end
 local function test_completion()
 	setup_project()
 	start_gopls()
+	local utils = require("cmp_go_deep.utils")
 
-	require("cmp_go_deep").setup({
+	vim.g.cmp_go_deep = {
 		notifications = false,
 		debounce_gopls_requests_ms = 25,
-		native_min_keyword_length = 2,
-		native_max_items = 20,
+		min_keyword_length = 2,
+		max_items = 20,
 		db_path = test_db,
-	})
+	}
 	require("cmp_go_deep").attach_to_buffer(0)
 
 	vim.api.nvim_win_set_cursor(0, { 4, 10 })
 	poll_completion("zzdeeptestcust", "helper.ZzDeepTestCustomHelper")
 
 	vim.v.completed_item = {
-		user_data = vim.json.encode({
-			cmp_go_deep = {
-				import_path = "testproject/helper",
-				package_alias = "helper",
-			},
+		user_data = utils.encode_complete_user_data({
+			import_path = "testproject/helper",
+			package_alias = "helper",
 		}),
 	}
 	require("cmp_go_deep").on_complete_done(0)

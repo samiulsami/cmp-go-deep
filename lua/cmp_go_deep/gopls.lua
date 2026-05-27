@@ -1,5 +1,3 @@
----@class cmp_go_deep.gopls
----@field public workspace_symbols fun(opts:cmp_go_deep.Options, gopls_client: vim.lsp.Client, bufnr: integer, cursor_prefix_word: string, callback: fun(items: lsp.SymbolInformation[]): nil): boolean, integer?
 local gopls = {}
 
 ---@param opts cmp_go_deep.Options

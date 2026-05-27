@@ -1,19 +1,28 @@
+local gopls = require("cmp_go_deep.gopls")
 local treesitter = require("cmp_go_deep.treesitter")
 local completionItemKind = vim.lsp.protocol.CompletionItemKind
+
+---@class cmp_go_deep.CompleteUserData
+---@field doc_key string|nil
+---@field import_path string|nil
+---@field package_alias string|nil
+---@field uri string|nil
+---@field range lsp.Range|nil
 
 ---@class cmp_go_deep.utils
 ---@field debounce fun(fn: fun(...), delay_ms: integer): fun(...)
 ---@field symbol_to_completion_kind fun(lspKind: lsp.SymbolKind): integer
 ---@field get_cursor_prefix_word fun(win_id: integer): string
 ---@field get_unique_package_alias fun(used_aliases: table<string, boolean>, package_alias: string): string
----@field get_gopls_client fun(): vim.lsp.Client|nil
----@field get_documentation fun(uri: string, range: lsp.Range): string
+---@field get_gopls_client fun(bufnr?: integer): vim.lsp.Client|nil
+---@field encode_complete_user_data fun(user_data: cmp_go_deep.CompleteUserData): string
+---@field decode_complete_user_data fun(user_data: string|table|nil): cmp_go_deep.CompleteUserData|nil
 ---@field get_imported_paths fun(opts: cmp_go_deep.Options, bufnr: integer): table<string, string>
 ---@field add_import_statement fun(opts: cmp_go_deep.Options, bufnr: integer, package_name: string | nil, import_path: string): nil
 ---@field get_package_name fun(opts: cmp_go_deep.Options, uri: string, package_name_cache: table<string, string>): string|nil, boolean
 ---@field deterministic_symbol_hash fun(symbol: lsp.SymbolInformation): string
+---@field symbol_hash fun(symbol: lsp.SymbolInformation): string
 ---@field process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, vendor_path_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>, on_reject: fun(rejected: table)|nil): table
----@field debounced_process_symbols fun(self, opts: cmp_go_deep.Options, bufnr: integer, vendor_path_prefix: string, project_path_prefix: string, symbols: table, processed_items: table<string, boolean>): table
 local utils = {}
 
 local symbol_to_completion_kind = {
@@ -73,58 +82,50 @@ utils.get_cursor_prefix_word = function(win_id)
 	return line:sub(start_col, end_col)
 end
 
----@param bufnr? integer
+---@param bufnr integer|nil
 ---@return vim.lsp.Client | nil
 utils.get_gopls_client = function(bufnr)
-	local gopls_clients = vim.lsp.get_clients({ name = "gopls", bufnr = bufnr })
+	local gopls_clients = vim.lsp.get_clients(bufnr and { name = "gopls", bufnr = bufnr } or { name = "gopls" })
 	if #gopls_clients > 0 then
 		return gopls_clients[1]
 	end
 	return nil
 end
 
----@param uri string
----@param range lsp.Range
+---@param user_data cmp_go_deep.CompleteUserData
 ---@return string
-utils.get_documentation = function(uri, range)
-	local filepath = vim.uri_to_fname(uri)
-	local bufnr = vim.fn.bufadd(filepath)
-	vim.fn.bufload(bufnr)
+utils.encode_complete_user_data = function(user_data)
+	return vim.json.encode({ cmp_go_deep = user_data })
+end
 
-	local doc_lines = {}
-	local start_line = range.start.line
-
-	for i = start_line - 1, 0, -1 do
-		local line = vim.api.nvim_buf_get_lines(bufnr, i, i + 1, false)[1]
-		if not line or line:match("^%s*$") then
-			break
-		end
-
-		local comment = line:match("^%s*//(.*)")
-		if comment then
-			table.insert(doc_lines, 1, vim.trim(comment))
-		else
-			break
-		end
+---@param user_data string|table|nil
+---@return cmp_go_deep.CompleteUserData|nil
+utils.decode_complete_user_data = function(user_data)
+	if type(user_data) == "table" then
+		return user_data.cmp_go_deep
 	end
 
-	if vim.tbl_isempty(doc_lines) then
-		return ""
+	if type(user_data) ~= "string" or user_data == "" then
+		return nil
 	end
 
-	local ft = vim.bo[bufnr].filetype
-	return string.format("```%s\n%s\n```", ft, table.concat(doc_lines, "\n"))
+	local ok, decoded = pcall(vim.json.decode, user_data)
+	if not ok or type(decoded) ~= "table" then
+		return nil
+	end
+
+	return decoded.cmp_go_deep
 end
 
 ---@param opts cmp_go_deep.Options
----@param bufnr (integer)
+---@param bufnr integer
 ---@return table<string, string>
 utils.get_imported_paths = function(opts, bufnr)
 	return treesitter.get_imported_paths(opts, bufnr)
 end
 
 ---@param opts cmp_go_deep.Options
----@param bufnr (integer)
+---@param bufnr integer
 ---@param package_alias string | nil
 ---@param import_path string
 utils.add_import_statement = function(opts, bufnr, package_alias, import_path)
@@ -148,7 +149,6 @@ end
 ---@param uri string
 ---@param package_name_cache table<string, string>
 ---@return string|nil, boolean
---- TODO: consider asking gopls for the package name, but this is probably faster
 utils.get_package_name = function(opts, uri, package_name_cache)
 	local cached = package_name_cache[uri]
 	if cached then
@@ -163,58 +163,12 @@ utils.get_package_name = function(opts, uri, package_name_cache)
 		return nil, false
 	end
 
-	if opts.get_package_name_implementation == "treesitter" then
-		local pkg = treesitter.get_package_name(uri)
-		if pkg then
-			package_name_cache[uri] = pkg
-			return pkg, true
-		end
-		package_name_cache[uri] = ""
-		return "", true
+	local pkg = treesitter.get_package_name(uri)
+	if pkg then
+		package_name_cache[uri] = pkg
+		return pkg, true
 	end
 
-	--default to regex
-	local fname = vim.uri_to_fname(uri)
-	if not fname then
-		if opts.notifications then
-			vim.notify("could not get file name from uri: " .. uri, vim.log.levels.WARN)
-		end
-		package_name_cache[uri] = ""
-		return nil, true
-	end
-
-	local file, err = io.open(fname, "r")
-	if not file then
-		if opts.notifications then
-			vim.notify("could not open file: " .. err, vim.log.levels.WARN)
-		end
-		package_name_cache[uri] = ""
-		return nil, true
-	end
-
-	local in_block = false
-	for line in file:lines() do
-		local ln = line:match("^%s*(.-)%s*$")
-		if not in_block and ln:find("^/%*") then
-			in_block = true
-			if ln:find("%*/") then
-				in_block = false
-			end
-		elseif in_block then
-			if ln:find("%*/") then
-				in_block = false
-			end
-		elseif ln == "" or ln:find("^//") then
-			-- ignore
-		else
-			local pkg = ln:match("^package%s+([%a_][%w_]*)")
-			file:close()
-			package_name_cache[uri] = pkg
-			return pkg, true
-		end
-	end
-
-	file:close()
 	package_name_cache[uri] = ""
 	return nil, true
 end
@@ -262,6 +216,8 @@ utils.deterministic_symbol_hash = function(symbol)
 	return vim.fn.sha256(ordered)
 end
 
+utils.symbol_hash = utils.deterministic_symbol_hash
+
 ---@param opts cmp_go_deep.Options
 ---@param bufnr integer
 ---@param vendor_path_prefix string
@@ -294,7 +250,6 @@ function utils:process_symbols(
 	local current_buf_dir = vim.fn.fnamemodify(current_buf_uri, ":h")
 	local current_file_path = vim.uri_to_fname(current_buf_uri)
 
-	---TODO: better type checking and error handling
 	for _, symbol in ipairs(symbols) do
 		local hash = self.deterministic_symbol_hash(symbol)
 		if processed_items[hash] then

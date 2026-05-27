@@ -4,10 +4,6 @@ local sqlite = require("sqlite.db")
 local math = require("math")
 
 ---@class cmp_go_deep.DB
----@field public setup fun(opts: cmp_go_deep.Options): cmp_go_deep.DB?
----@field public load fun(self, query_string: string, match_strategy: string | "fuzzy" | "name" | "name_lower"): table
----@field public save fun(self, utils: cmp_go_deep.utils, symbol_information: table): nil
----@field public delete fun(self, utils: cmp_go_deep.utils, symbols: table): nil
 ---@field private load_by_name_stmt sqlstmt
 ---@field private load_by_name_lower_stmt sqlstmt
 ---@field private load_by_fuzzy_text_stmt sqlstmt
@@ -29,11 +25,15 @@ local math = require("math")
 ---@field private PRUNE_PERCENTAGE_THRESHOLD number
 ---@field private version_id integer
 local DB = {
-	MAX_DB_SIZE_BYTES = 100 * 1024 * 1024,
-	PRUNE_PERCENTAGE_THRESHOLD = 0.8,
+	MAX_DB_SIZE_BYTES = 30 * 1024 * 1024,
+	PRUNE_PERCENTAGE_THRESHOLD = 0.7,
 }
-local SCHEMA_VERSION = "v0.1.1"
+local SCHEMA_VERSION = "v0.1.7"
 local MAX_SYMBOLS_TO_LOAD = 100
+local PAGE_SIZE = 512
+local CACHE_SIZE_KIB = 4096
+local WAL_AUTOCHECKPOINT_PAGES = 4000
+local MMAP_SIZE_BYTES = 64 * 1024 * 1024
 
 --- @return string version_tag
 local function detect_version_tag()
@@ -45,31 +45,29 @@ end
 function DB.setup(opts)
 	DB.notifications = opts.notifications
 	DB.db_path = opts.db_path
-	DB.db = sqlite:open(opts.db_path)
-
-	local result = DB.db:eval("PRAGMA journal_mode = WAL")
-	if type(result) == "table" and result[1] and result[1].journal_mode ~= "wal" then
-		if DB.notifications then
-			vim.notify("Failed to set journal_mode to WAL", vim.log.levels.WARN)
-		end
+	local db_dir = vim.fn.fnamemodify(DB.db_path, ":h")
+	if vim.fn.isdirectory(db_dir) == 0 then
+		vim.fn.mkdir(db_dir, "p")
 	end
-	DB.db:eval("PRAGMA page_size = 8192")
+	DB.db = sqlite:open(opts.db_path)
+	DB.db:eval("PRAGMA busy_timeout = 200")
+	DB.db:eval("PRAGMA page_size = " .. PAGE_SIZE)
+	DB.db:eval("PRAGMA auto_vacuum = incremental")
 	DB.db:eval("PRAGMA synchronous = NORMAL")
 	DB.db:eval("PRAGMA temp_store = MEMORY")
-	DB.db:eval("PRAGMA cache_size = -20000")
-	DB.db:eval("PRAGMA mmap_size = 104857600")
-	DB.db:eval("PRAGMA wal_autocheckpoint = 2000")
-	DB.db:eval("PRAGMA busy_timeout = 5000")
-	DB.db:eval("PRAGMA auto_vacuum = incremental")
+	DB.db:eval("PRAGMA cache_size = -" .. CACHE_SIZE_KIB)
+	DB.db:eval("PRAGMA wal_autocheckpoint = " .. WAL_AUTOCHECKPOINT_PAGES)
+	DB.db:eval("PRAGMA mmap_size = " .. MMAP_SIZE_BYTES)
 
 	DB.db:eval([[
 		    CREATE TABLE IF NOT EXISTS meta (
 			version TEXT PRIMARY KEY
-	  	    );
+	  	    ) WITHOUT ROWID;
 		]])
 
 	local res = DB.db:eval("SELECT version FROM meta;")
 	if type(res) ~= "table" or #res == 0 or res[1].version ~= SCHEMA_VERSION then
+		DB.db:eval("PRAGMA journal_mode = DELETE")
 		DB.db:eval("DELETE FROM meta")
 		DB.db:eval("INSERT INTO meta (version) VALUES ('" .. SCHEMA_VERSION .. "')")
 		DB.db:eval("DROP TABLE IF EXISTS gosymbols_fts")
@@ -80,17 +78,24 @@ function DB.setup(opts)
 		DB.db:eval("PRAGMA wal_checkpoint(TRUNCATE);")
 	end
 
+	local result = DB.db:eval("PRAGMA journal_mode = WAL")
+	if type(result) == "table" and result[1] and result[1].journal_mode ~= "wal" then
+		if DB.notifications then
+			vim.notify("Failed to set journal_mode to WAL", vim.log.levels.WARN)
+		end
+	end
+
 	local tables = {
 		[[
 	    CREATE TABLE IF NOT EXISTS versions (
-	      id INTEGER PRIMARY KEY AUTOINCREMENT,
+	      id INTEGER PRIMARY KEY,
 	      version_tag TEXT UNIQUE NOT NULL
 	    );
 	]],
 
 		[[
 	    CREATE TABLE IF NOT EXISTS gosymbols (
-	      id INTEGER PRIMARY KEY AUTOINCREMENT,
+	      id INTEGER PRIMARY KEY,
 	      hash TEXT UNIQUE NOT NULL,
 	      data TEXT NOT NULL,
 	      last_modified INTEGER NOT NULL,
@@ -100,7 +105,7 @@ function DB.setup(opts)
 
 		[[
 	    CREATE VIRTUAL TABLE IF NOT EXISTS gosymbols_fts
-	    USING fts5(name, name_lower, fuzzy_text, id, tokenize='trigram');
+	    USING fts5(name, name_lower, fuzzy_text, tokenize='trigram', detail='none', columnsize=0);
 	]],
 	}
 
@@ -122,7 +127,6 @@ function DB.setup(opts)
 	end
 
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_last_modified ON gosymbols (last_modified DESC);")
-	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_hash ON gosymbols (hash DESC);")
 	DB.db:eval("CREATE INDEX IF NOT EXISTS idx_version_id ON gosymbols (version_id);")
 
 	local version_tag = detect_version_tag()
@@ -149,7 +153,7 @@ function DB.setup(opts)
 
 	DB.load_by_fuzzy_text_stmt = sqlstmt:parse(DB.db.conn, [[
 		SELECT gosymbols.data FROM gosymbols
-		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
+		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.rowid
 		WHERE gosymbols.version_id = ?
 		AND gosymbols_fts.fuzzy_text LIKE '%' || ? || '%'
 		ORDER BY gosymbols.last_modified DESC
@@ -158,7 +162,7 @@ function DB.setup(opts)
 
 	DB.load_by_name_stmt = sqlstmt:parse(DB.db.conn, [[
 		SELECT gosymbols.data FROM gosymbols
-		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
+		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.rowid
 		WHERE gosymbols.version_id = ?
 		AND gosymbols_fts.name LIKE '%' || ? || '%'
 		ORDER BY gosymbols.last_modified DESC
@@ -167,7 +171,7 @@ function DB.setup(opts)
 
 	DB.load_by_name_lower_stmt = sqlstmt:parse(DB.db.conn, [[
 		SELECT gosymbols.data FROM gosymbols
-		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.id
+		JOIN gosymbols_fts ON gosymbols.id = gosymbols_fts.rowid
 		WHERE gosymbols.version_id = ?
 		AND gosymbols_fts.name_lower LIKE '%' || ? || '%'
 		ORDER BY gosymbols.last_modified DESC
@@ -192,9 +196,9 @@ function DB.setup(opts)
 	DB.insert_gosymbols_fts_stmt = sqlstmt:parse(
 		DB.db.conn,
 		[[
-		    INSERT OR REPLACE INTO gosymbols_fts (name, name_lower, fuzzy_text, id)
+		    INSERT OR REPLACE INTO gosymbols_fts (rowid, name, name_lower, fuzzy_text)
 		    VALUES (?, ?, ?, ?);
-		]]
+	]]
 	)
 
 	DB.delete_gosymbols_stmt = sqlstmt:parse(
@@ -211,10 +215,10 @@ function DB.setup(opts)
 		DB.db.conn,
 		[[
 		    DELETE FROM gosymbols_fts
-		    WHERE id IN (
+		    WHERE rowid IN (
 			    SELECT id FROM gosymbols ORDER BY last_modified ASC LIMIT ?
 		    );
-		]]
+	]]
 	)
 
 	DB.delete_by_hash_stmt = sqlstmt:parse(
@@ -227,8 +231,8 @@ function DB.setup(opts)
 	DB.delete_fts_by_hash_stmt = sqlstmt:parse(
 		DB.db.conn,
 		[[
-		    DELETE FROM gosymbols_fts WHERE id = (SELECT id FROM gosymbols WHERE hash = ?);
-		]]
+		    DELETE FROM gosymbols_fts WHERE rowid = (SELECT id FROM gosymbols WHERE hash = ?);
+	]]
 	)
 
 	-- Prepared statements for prune()
@@ -249,7 +253,7 @@ function DB.setup(opts)
 	)
 
 	DB.delete_orphan_fts_stmt =
-		sqlstmt:parse(DB.db.conn, [[DELETE FROM gosymbols_fts WHERE id NOT IN (SELECT id FROM gosymbols);]])
+		sqlstmt:parse(DB.db.conn, [[DELETE FROM gosymbols_fts WHERE rowid NOT IN (SELECT id FROM gosymbols);]])
 
 	return DB
 end
@@ -397,7 +401,15 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 
 	for _, symbol in ipairs(symbol_information) do
 		local encoded = vim.json.encode(symbol)
-		local hash = utils.deterministic_symbol_hash(symbol)
+		local hash = utils.symbol_hash(symbol)
+
+		self.delete_fts_by_hash_stmt:bind({ hash })
+		if self.delete_fts_by_hash_stmt:step() ~= sqlite.flags["done"] then
+			return rollback("failed to delete existing gosymbols_fts row")
+		end
+		if self.delete_fts_by_hash_stmt:reset() ~= sqlite.flags["ok"] then
+			return rollback("failed to reset delete_fts_by_hash_stmt")
+		end
 
 		self.insert_gosymbols_stmt:bind({ encoded, hash, last_modified, self.version_id })
 		if self.insert_gosymbols_stmt:step() ~= sqlite.flags["done"] then
@@ -416,10 +428,10 @@ function DB:save(utils, symbol_information) --- assumes that gopls doesn't retur
 		end
 
 		self.insert_gosymbols_fts_stmt:bind({
+			id,
 			symbol.name,
 			symbol.name_lower,
 			(symbol.fuzzy_text or "") .. symbol.name_lower,
-			id,
 		})
 		if self.insert_gosymbols_fts_stmt:step() ~= sqlite.flags["done"] then
 			return rollback("failed to insert gosymbols_fts row")
@@ -463,7 +475,7 @@ function DB:delete(utils, symbols)
 	end
 
 	for _, symbol in ipairs(symbols) do
-		local hash = utils.deterministic_symbol_hash(symbol)
+		local hash = utils.symbol_hash(symbol)
 
 		self.delete_fts_by_hash_stmt:bind({ hash })
 		if self.delete_fts_by_hash_stmt:step() ~= sqlite.flags["done"] then
