@@ -1,5 +1,8 @@
 # cmp-go-deep
 
+> Deprecated in favor of [`go-deep.nvim`](https://github.com/samiulsami/go-deep.nvim).
+> I rewrote this because the Lua backend kept stuttering on input and/or db updates, and attempting to index stdlib was blocking the UI too much. The new repo moves the backend to Go, which made the concurrency, stdlib indexing, and overall completion path much simpler and more reliable.
+
 A Go ```deep-completion``` source for [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) / [blink.cmp](https://github.com/Saghen/blink.cmp), that works alongside [cmp-nvim-lsp](https://github.com/hrsh7th/cmp-nvim-lsp) / [blink.cmp](https://github.com/Saghen/blink.cmp)'s LSP source and provides completion suggestions for <b> "<i>UNIMPORTED</i> LOCAL, INTERNAL, AND VENDORED PACKAGES ONLY".</b>
 
 #### Why?
